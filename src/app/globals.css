@@ -2,25 +2,25 @@
 
 @layer base {
   :root {
-    --background: 220 14% 96%;
-    --foreground: 220 15% 15%;
+    --background: 220 34% 97%;
+    --foreground: 224 28% 16%;
     --card: 0 0% 100%;
-    --card-foreground: 220 15% 15%;
+    --card-foreground: 224 28% 16%;
     --popover: 0 0% 100%;
-    --popover-foreground: 220 15% 15%;
-    --primary: 25 90% 48%;
+    --popover-foreground: 224 28% 16%;
+    --primary: 212 92% 57%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 220 14% 90%;
-    --secondary-foreground: 220 15% 15%;
-    --muted: 220 10% 90%;
-    --muted-foreground: 220 10% 45%;
-    --accent: 25 90% 48%;
+    --secondary: 220 30% 93%;
+    --secondary-foreground: 224 26% 17%;
+    --muted: 220 22% 90%;
+    --muted-foreground: 220 12% 41%;
+    --accent: 198 84% 56%;
     --accent-foreground: 0 0% 100%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
-    --border: 220 13% 87%;
-    --input: 220 13% 87%;
-    --ring: 25 90% 48%;
+    --border: 220 24% 84%;
+    --input: 220 24% 84%;
+    --ring: 212 92% 57%;
     --radius: 0.75rem;
 
     --status-running: 142 71% 45%;
@@ -38,21 +38,21 @@
   }
 
   .concept-a {
-    --background: 40 20% 96%;
-    --foreground: 220 15% 12%;
+    --background: 218 44% 97%;
+    --foreground: 224 30% 14%;
     --card: 0 0% 100%;
-    --card-foreground: 220 15% 12%;
-    --primary: 25 90% 48%;
+    --card-foreground: 224 30% 14%;
+    --primary: 212 92% 57%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 40 12% 90%;
-    --secondary-foreground: 220 15% 12%;
-    --muted: 40 10% 88%;
-    --muted-foreground: 220 10% 45%;
-    --accent: 25 85% 55%;
+    --secondary: 214 42% 94%;
+    --secondary-foreground: 224 30% 14%;
+    --muted: 214 30% 91%;
+    --muted-foreground: 220 14% 42%;
+    --accent: 198 88% 58%;
     --accent-foreground: 0 0% 100%;
-    --border: 40 15% 85%;
-    --input: 40 15% 85%;
-    --ring: 25 90% 48%;
+    --border: 214 28% 86%;
+    --input: 214 28% 86%;
+    --ring: 212 92% 57%;
   }
 
   * {
@@ -61,6 +61,10 @@
 
   body {
     @apply bg-background text-foreground;
+    background-image:
+      radial-gradient(circle at 8% 0%, hsl(204 90% 92% / 0.6) 0%, transparent 40%),
+      radial-gradient(circle at 100% 12%, hsl(218 92% 92% / 0.55) 0%, transparent 38%),
+      linear-gradient(180deg, hsl(var(--background)) 0%, hsl(220 32% 95%) 100%);
     font-family: 'Space Grotesk', system-ui, sans-serif;
   }
 }
@@ -93,6 +97,14 @@
 @layer utilities {
   .font-data {
     font-family: 'JetBrains Mono', monospace;
+  }
+
+  .bg-card-subtle {
+    background-image: linear-gradient(
+      165deg,
+      hsl(var(--card)) 0%,
+      hsl(var(--secondary) / 0.38) 100%
+    );
   }
 }
 
