@@ -3,8 +3,8 @@
 import type { MachineStatus } from "@/src/types/dashboard";
 import { formatPowerWatts } from "@/src/lib/format";
 
-import DashboardCard from "./DashboardCard";
-import InfoTooltip from "./InfoTooltip";
+import DashboardCard from "./dashboard-card";
+import InfoTooltip from "./info-tooltip";
 import { getStatusTheme } from "./status";
 
 interface StatusBlockProps {

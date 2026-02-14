@@ -14,8 +14,8 @@ import {
 import type { DayHistory } from "@/src/types/dashboard";
 import { formatChartDate, formatMinutes, formatPercent, formatShortDate } from "@/src/lib/format";
 
-import DashboardCard from "./DashboardCard";
-import SectionHeading from "./SectionHeading";
+import DashboardCard from "./dashboard-card";
+import SectionHeading from "./section-heading";
 
 interface OccupancyChartProps {
   data: DayHistory[];
@@ -36,16 +36,16 @@ function CustomTooltip({ active, payload }: { active?: boolean; payload?: Toolti
   }
 
   return (
-    <div className="rounded-md border border-border bg-card p-3 shadow-lg">
-      <p className="text-sm font-semibold text-card-foreground">{formatShortDate(row.date)}</p>
-      <p className="text-sm text-muted-foreground">
-        Occupancy: <span className="font-data font-semibold text-foreground">{formatPercent(row.occupancyPct)}</span>
+    <div className="rounded-md border border-overlay-border bg-overlay p-3 shadow-lg">
+      <p className="text-sm font-semibold text-overlay-foreground">{formatShortDate(row.date)}</p>
+      <p className="text-sm text-overlay-foreground/75">
+        Occupancy: <span className="font-data font-semibold text-overlay-foreground">{formatPercent(row.occupancyPct)}</span>
       </p>
-      <p className="text-sm text-muted-foreground">
-        Runtime: <span className="font-data">{formatMinutes(row.runtimeMin)}</span>
+      <p className="text-sm text-overlay-foreground/75">
+        Runtime: <span className="font-data text-overlay-foreground">{formatMinutes(row.runtimeMin)}</span>
       </p>
-      <p className="text-sm text-muted-foreground">
-        Elapsed: <span className="font-data">{formatMinutes(row.elapsedMin)}</span>
+      <p className="text-sm text-overlay-foreground/75">
+        Elapsed: <span className="font-data text-overlay-foreground">{formatMinutes(row.elapsedMin)}</span>
       </p>
     </div>
   );

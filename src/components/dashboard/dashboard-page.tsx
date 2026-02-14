@@ -2,16 +2,16 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import Gauge from "@/src/components/dashboard/Gauge";
-import KpiCard from "@/src/components/dashboard/KpiCard";
-import DashboardCard from "@/src/components/dashboard/DashboardCard";
-import MachineSwitcher from "@/src/components/dashboard/MachineSwitcher";
-import OccupancyChart from "@/src/components/dashboard/OccupancyChart";
-import SectionHeading from "@/src/components/dashboard/SectionHeading";
-import SheetPanel from "@/src/components/dashboard/SheetPanel";
-import StatusBlock from "@/src/components/dashboard/StatusBlock";
+import DashboardCard from "@/src/components/dashboard/dashboard-card";
+import Gauge from "@/src/components/dashboard/gauge";
+import KpiCard from "@/src/components/dashboard/kpi-card";
+import MachineSwitcher from "@/src/components/dashboard/machine-switcher";
+import OccupancyChart from "@/src/components/dashboard/occupancy-chart";
+import SectionHeading from "@/src/components/dashboard/section-heading";
+import SheetPanel from "@/src/components/dashboard/sheet-panel";
+import StatusBlock from "@/src/components/dashboard/status-block";
 import { getStatusTheme } from "@/src/components/dashboard/status";
-import { useMachineData, useMachineList } from "@/src/hooks/useMachineData";
+import { useMachineData, useMachineList } from "@/src/hooks/use-machine-data";
 import { formatTime, formatTimestamp } from "@/src/lib/format";
 
 function SkeletonCard({ className }: { className?: string }) {
@@ -201,7 +201,7 @@ export default function DashboardPage() {
 
             {data.sheet ? (
               <div className="animate-fade-up animate-fade-up-delay-3">
-                <SheetPanel mode={data.sheet.mode} url={data.sheet.url} />
+                <SheetPanel url={data.sheet.url} />
               </div>
             ) : null}
           </main>

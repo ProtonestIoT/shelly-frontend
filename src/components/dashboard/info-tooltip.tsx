@@ -15,10 +15,10 @@ export default function InfoTooltip({ label, children }: InfoTooltipProps) {
         <Tooltip.Portal>
           <Tooltip.Content
             sideOffset={8}
-            className="z-[9999] max-w-60 rounded-md border border-border bg-popover px-3 py-2 text-xs leading-relaxed text-popover-foreground shadow-xl"
+            className="z-[9999] max-w-60 rounded-md border border-overlay-border bg-overlay px-3 py-2 text-xs leading-relaxed text-overlay-foreground shadow-xl"
           >
             {label}
-            <Tooltip.Arrow className="fill-popover" />
+            <Tooltip.Arrow className="fill-overlay" />
           </Tooltip.Content>
         </Tooltip.Portal>
       </Tooltip.Root>

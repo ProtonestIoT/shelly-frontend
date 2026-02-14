@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 
 import { cn } from "@/src/lib/utils";
 
-import InfoTooltip from "./InfoTooltip";
+import InfoTooltip from "./info-tooltip";
 
 interface GaugeProps {
   label: string;
@@ -23,6 +23,8 @@ function getGaugeColor(value: number): string {
 }
 
 export default function Gauge({ label, value, size = "md" }: GaugeProps) {
+  const innerShadowId = useId();
+  const lineShadowId = useId();
   const dimensions = { sm: 80, md: 120, lg: 160 };
   const strokeWidths = { sm: 6, md: 8, lg: 10 };
   const fontSizes = { sm: 14, md: 20, lg: 28 };
@@ -35,7 +37,8 @@ export default function Gauge({ label, value, size = "md" }: GaugeProps) {
   const dashOffset = circumference - (normalized / 100) * circumference;
   const [animatedDashOffset, setAnimatedDashOffset] = useState(circumference);
   const color = getGaugeColor(normalized);
-  const statusText = normalized >= 60 ? "Good" : normalized >= 30 ? "Below target" : "Critical";
+  const statusText =
+    normalized >= 60 ? "Good" : normalized >= 30 ? "Below target" : "Critical";
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -56,6 +59,53 @@ export default function Gauge({ label, value, size = "md" }: GaugeProps) {
           aria-label={`${label} gauge details`}
         >
           <svg width={dimension} height={dimension} viewBox={`0 0 ${dimension} ${dimension}`}>
+            <defs>
+              <filter id={innerShadowId} x="-40%" y="-40%" width="180%" height="180%">
+                <feOffset in="SourceAlpha" dx="0" dy="0.45" result="offset" />
+                <feGaussianBlur in="offset" stdDeviation="0.6" result="blur" />
+                <feComposite
+                  in="blur"
+                  in2="SourceAlpha"
+                  operator="arithmetic"
+                  k2="-1"
+                  k3="1"
+                  result="innerShadow"
+                />
+                <feColorMatrix
+                  in="innerShadow"
+                  type="matrix"
+                  values="0 0 0 0 0.1 0 0 0 0 0.13 0 0 0 0 0.2 0 0 0 0.28 0"
+                  result="shadowColor"
+                />
+                <feBlend in="SourceGraphic" in2="shadowColor" mode="multiply" />
+              </filter>
+              <filter id={lineShadowId} x="-50%" y="-50%" width="200%" height="200%">
+                <feOffset in="SourceAlpha" dx="0" dy="0.35" result="lineOffset" />
+                <feGaussianBlur in="lineOffset" stdDeviation="0.55" result="lineBlur" />
+                <feComposite
+                  in="lineBlur"
+                  in2="SourceAlpha"
+                  operator="arithmetic"
+                  k2="-1"
+                  k3="1"
+                  result="lineInnerShadow"
+                />
+                <feColorMatrix
+                  in="lineInnerShadow"
+                  type="matrix"
+                  values="0 0 0 0 0.1 0 0 0 0 0.13 0 0 0 0 0.2 0 0 0 0.24 0"
+                  result="lineShadowColor"
+                />
+                <feBlend in="SourceGraphic" in2="lineShadowColor" mode="multiply" />
+              </filter>
+            </defs>
+            <circle
+              cx={dimension / 2}
+              cy={dimension / 2}
+              r={radius + strokeWidth * 0.35}
+              fill="hsl(var(--card))"
+              filter={`url(#${innerShadowId})`}
+            />
             <circle
               cx={dimension / 2}
               cy={dimension / 2}
@@ -75,7 +125,8 @@ export default function Gauge({ label, value, size = "md" }: GaugeProps) {
               strokeDashoffset={animatedDashOffset}
               strokeLinecap="round"
               transform={`rotate(-90 ${dimension / 2} ${dimension / 2})`}
-              className="transition-all duration-[1200ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
+              filter={`url(#${lineShadowId})`}
+              className="transition-all duration-1200 ease-[cubic-bezier(0.22,1,0.36,1)]"
             />
             <text
               x={dimension / 2}

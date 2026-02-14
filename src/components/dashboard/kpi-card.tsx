@@ -5,9 +5,9 @@ import { useEffect, useRef, useState } from "react";
 import { formatHours, formatMinutes, formatPercent } from "@/src/lib/format";
 import type { PeriodMetrics } from "@/src/types/dashboard";
 
-import DashboardCard from "./DashboardCard";
-import InfoTooltip from "./InfoTooltip";
-import SectionHeading from "./SectionHeading";
+import DashboardCard from "./dashboard-card";
+import InfoTooltip from "./info-tooltip";
+import SectionHeading from "./section-heading";
 import { getPercentToneClass } from "./status";
 
 interface KpiCardProps {

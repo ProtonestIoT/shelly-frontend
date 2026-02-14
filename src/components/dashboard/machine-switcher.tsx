@@ -105,7 +105,7 @@ export default function MachineSwitcher({
           id={listboxId}
           role="listbox"
           aria-label="Machine list"
-          className="animate-soft-pop absolute left-0 top-full z-50 mt-1 w-56 rounded-lg border border-border bg-card shadow-lg"
+          className="animate-soft-pop absolute left-0 top-full z-50 mt-1 w-56 rounded-lg border border-overlay-border bg-overlay text-overlay-foreground shadow-lg"
         >
           {machines.map((machine, index) => (
             <button
@@ -144,8 +144,8 @@ export default function MachineSwitcher({
                 }
               }}
               className={cn(
-                "motion-smooth flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm hover:bg-muted",
-                machine.id === selected && "bg-muted font-semibold",
+                "motion-smooth flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm hover:bg-white/8",
+                machine.id === selected && "bg-white/10 font-semibold",
               )}
             >
               <span
@@ -153,7 +153,7 @@ export default function MachineSwitcher({
                 aria-hidden="true"
               />
               <span className="truncate">{machine.name}</span>
-              <span className="ml-auto text-[10px] tracking-wider text-muted-foreground uppercase font-data">
+              <span className="ml-auto text-[10px] tracking-wider text-overlay-foreground/70 uppercase font-data">
                 {machine.state}
               </span>
             </button>

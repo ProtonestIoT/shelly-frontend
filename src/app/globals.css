@@ -3,17 +3,17 @@
 @layer base {
   :root {
     --background: 220 34% 97%;
-    --foreground: 224 28% 16%;
+    --foreground: 224 30% 12%;
     --card: 0 0% 100%;
-    --card-foreground: 224 28% 16%;
+    --card-foreground: 224 30% 12%;
     --popover: 0 0% 100%;
-    --popover-foreground: 224 28% 16%;
+    --popover-foreground: 224 30% 12%;
     --primary: 212 92% 57%;
     --primary-foreground: 0 0% 100%;
     --secondary: 220 30% 93%;
-    --secondary-foreground: 224 26% 17%;
+    --secondary-foreground: 224 30% 13%;
     --muted: 220 22% 90%;
-    --muted-foreground: 220 12% 41%;
+    --muted-foreground: 220 14% 31%;
     --accent: 198 84% 56%;
     --accent-foreground: 0 0% 100%;
     --destructive: 0 84% 60%;
@@ -21,9 +21,12 @@
     --border: 220 24% 84%;
     --input: 220 24% 84%;
     --ring: 212 92% 57%;
+    --overlay: 224 23% 13%;
+    --overlay-foreground: 220 20% 96%;
+    --overlay-border: 220 18% 28%;
     --radius: 0.75rem;
 
-    --status-running: 142 71% 45%;
+    --status-running: 152 68% 39%;
     --status-idle: 38 92% 50%;
     --status-disconnected: 0 72% 51%;
 
@@ -45,20 +48,23 @@
 
   .concept-a {
     --background: 218 44% 97%;
-    --foreground: 224 30% 14%;
+    --foreground: 224 32% 11%;
     --card: 0 0% 100%;
-    --card-foreground: 224 30% 14%;
+    --card-foreground: 224 32% 11%;
     --primary: 212 92% 57%;
     --primary-foreground: 0 0% 100%;
     --secondary: 214 42% 94%;
-    --secondary-foreground: 224 30% 14%;
+    --secondary-foreground: 224 32% 12%;
     --muted: 214 30% 91%;
-    --muted-foreground: 220 14% 42%;
+    --muted-foreground: 220 15% 30%;
     --accent: 198 88% 58%;
     --accent-foreground: 0 0% 100%;
     --border: 214 28% 86%;
     --input: 214 28% 86%;
     --ring: 212 92% 57%;
+    --overlay: 224 23% 13%;
+    --overlay-foreground: 220 20% 96%;
+    --overlay-border: 220 18% 28%;
   }
 
   * {
@@ -95,6 +101,9 @@
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
+  --color-overlay: hsl(var(--overlay));
+  --color-overlay-foreground: hsl(var(--overlay-foreground));
+  --color-overlay-border: hsl(var(--overlay-border));
   --color-status-running: hsl(var(--status-running));
   --color-status-idle: hsl(var(--status-idle));
   --color-status-disconnected: hsl(var(--status-disconnected));
