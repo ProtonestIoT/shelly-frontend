@@ -149,26 +149,35 @@ export default function DashboardPage() {
         {!hasError && data ? (
           <main className="relative z-0 space-y-4 sm:space-y-6">
             <section className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-              <div className="h-full animate-fade-up-delay-1">
+              <div className="h-full animate-fade-up animate-fade-up-delay-1">
                 <StatusBlock status={data.machine.state} powerWatts={data.machine.powerWatts} />
               </div>
               {data.periods?.today ? (
-                <div className="h-full animate-fade-up-delay-1">
-                  <KpiCard title="Today" data={data.periods.today} />
+                <div className="h-full animate-fade-up animate-fade-up-delay-1">
+                  <KpiCard
+                    title="Today"
+                    data={data.periods.today}
+                    refreshKey={data.machine.lastUpdated}
+                  />
                 </div>
               ) : null}
               {data.periods?.week ? (
-                <div className="h-full animate-fade-up-delay-2">
+                <div className="h-full animate-fade-up animate-fade-up-delay-2">
                   <KpiCard
                     title="This Week"
                     data={data.periods.week}
                     weeklyBaselineHours={data.baseline?.weeklyHours}
+                    refreshKey={data.machine.lastUpdated}
                   />
                 </div>
               ) : null}
               {data.periods?.month ? (
-                <div className="h-full animate-fade-up-delay-3">
-                  <KpiCard title="This Month" data={data.periods.month} />
+                <div className="h-full animate-fade-up animate-fade-up-delay-3">
+                  <KpiCard
+                    title="This Month"
+                    data={data.periods.month}
+                    refreshKey={data.machine.lastUpdated}
+                  />
                 </div>
               ) : null}
             </section>
@@ -185,13 +194,13 @@ export default function DashboardPage() {
             ) : null}
 
             {data.history7d?.length ? (
-              <div className="animate-fade-up-delay-2">
+              <div className="animate-fade-up animate-fade-up-delay-2">
                 <OccupancyChart data={data.history7d} />
               </div>
             ) : null}
 
             {data.sheet ? (
-              <div className="animate-fade-up-delay-3">
+              <div className="animate-fade-up animate-fade-up-delay-3">
                 <SheetPanel mode={data.sheet.mode} url={data.sheet.url} />
               </div>
             ) : null}

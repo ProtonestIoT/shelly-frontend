@@ -86,7 +86,7 @@ export default function MachineSwitcher({
             setOpen(false);
           }
         }}
-        className="flex w-full items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+        className="motion-smooth flex w-full items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-semibold text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
       >
         {current ? (
           <span className={cn("h-2 w-2 rounded-full", stateColors[current.state])} aria-hidden="true" />
@@ -94,7 +94,7 @@ export default function MachineSwitcher({
         <span className="min-w-0 flex-1 truncate text-left">{current?.name ?? "Select Machine"}</span>
         <ChevronDown
           className={cn(
-            "h-4 w-4 shrink-0 text-muted-foreground transition-transform",
+            "h-4 w-4 shrink-0 text-muted-foreground motion-smooth",
             open && "rotate-180",
           )}
         />
@@ -144,7 +144,7 @@ export default function MachineSwitcher({
                 }
               }}
               className={cn(
-                "flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm transition-colors hover:bg-muted",
+                "motion-smooth flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm hover:bg-muted",
                 machine.id === selected && "bg-muted font-semibold",
               )}
             >

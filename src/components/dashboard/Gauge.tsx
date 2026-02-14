@@ -75,7 +75,7 @@ export default function Gauge({ label, value, size = "md" }: GaugeProps) {
               strokeDashoffset={animatedDashOffset}
               strokeLinecap="round"
               transform={`rotate(-90 ${dimension / 2} ${dimension / 2})`}
-              className="transition-all duration-1000 ease-out"
+              className="transition-all duration-[1200ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
             />
             <text
               x={dimension / 2}

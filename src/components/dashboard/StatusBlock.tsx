@@ -36,7 +36,7 @@ export default function StatusBlock({ status, powerWatts }: StatusBlockProps) {
         <InfoTooltip label="Current machine operating state based on the latest power draw sample and continuity of telemetry updates.">
           <button
             type="button"
-            className="inline-flex items-center gap-3 rounded-lg border border-border bg-secondary px-3 py-2"
+            className="motion-smooth inline-flex items-center gap-3 rounded-lg border border-border bg-secondary px-3 py-2"
             aria-label="Current machine status details"
           >
             <span
@@ -52,7 +52,7 @@ export default function StatusBlock({ status, powerWatts }: StatusBlockProps) {
         <InfoTooltip label="Instantaneous electrical power draw from the monitored CNC circuit. Higher values usually represent active spindle/tool movement.">
           <button
             type="button"
-            className="inline-flex items-end gap-2 rounded-lg border border-border bg-secondary px-4 py-3"
+            className="motion-smooth inline-flex items-end gap-2 rounded-lg border border-border bg-secondary px-4 py-3"
             aria-label="Current power reading details"
           >
             <span className="font-data text-4xl font-semibold text-foreground">
