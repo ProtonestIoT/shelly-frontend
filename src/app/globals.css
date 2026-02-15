@@ -73,10 +73,6 @@
 
   body {
     @apply bg-background text-foreground;
-    background-image:
-      radial-gradient(circle at 8% 0%, hsl(204 90% 92% / 0.6) 0%, transparent 40%),
-      radial-gradient(circle at 100% 12%, hsl(218 92% 92% / 0.55) 0%, transparent 38%),
-      linear-gradient(180deg, hsl(var(--background)) 0%, hsl(220 32% 95%) 100%);
     font-family: 'Space Grotesk', system-ui, sans-serif;
   }
 }
@@ -112,14 +108,6 @@
 @layer utilities {
   .font-data {
     font-family: 'JetBrains Mono', monospace;
-  }
-
-  .bg-card-subtle {
-    background-image: linear-gradient(
-      165deg,
-      hsl(var(--card)) 0%,
-      hsl(var(--secondary) / 0.38) 100%
-    );
   }
 }
 

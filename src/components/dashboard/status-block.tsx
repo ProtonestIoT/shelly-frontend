@@ -1,6 +1,7 @@
 "use client";
 
 import type { MachineStatus } from "@/src/types/dashboard";
+import { TOOLTIP_COPY } from "@/src/lib/dashboard-copy";
 import { formatPowerWatts } from "@/src/lib/format";
 
 import DashboardCard from "./dashboard-card";
@@ -21,7 +22,7 @@ export default function StatusBlock({ status, powerWatts }: StatusBlockProps) {
         <h2 className="text-xs tracking-[0.22em] text-muted-foreground uppercase">
           Live Status
         </h2>
-        <InfoTooltip label="Machine state inferred from power signal thresholds. RUNNING reflects active cutting/rapid cycles, IDLE indicates powered but inactive, DISCONNECTED indicates no valid feed from source telemetry.">
+        <InfoTooltip label={TOOLTIP_COPY.statusMeaning}>
           <button
             type="button"
             className="rounded-full border border-border px-2 py-0.5 text-[10px] text-muted-foreground"
@@ -33,7 +34,7 @@ export default function StatusBlock({ status, powerWatts }: StatusBlockProps) {
       </div>
 
       <div className="space-y-4">
-        <InfoTooltip label="Current machine operating state based on the latest power draw sample and continuity of telemetry updates.">
+        <InfoTooltip label={TOOLTIP_COPY.statusCurrent}>
           <button
             type="button"
             className="motion-smooth inline-flex items-center gap-3 rounded-lg border border-border bg-secondary px-3 py-2"
@@ -49,7 +50,7 @@ export default function StatusBlock({ status, powerWatts }: StatusBlockProps) {
           </button>
         </InfoTooltip>
 
-        <InfoTooltip label="Instantaneous electrical power draw from the monitored CNC circuit. Higher values usually represent active spindle/tool movement.">
+        <InfoTooltip label={TOOLTIP_COPY.powerCurrent}>
           <button
             type="button"
             className="motion-smooth inline-flex items-end gap-2 rounded-lg border border-border bg-secondary px-4 py-3"

@@ -18,8 +18,8 @@ export default function DashboardCard({
       {...props}
       className={cn(
         compact
-          ? "rounded-lg border border-border bg-card bg-card-subtle p-4 shadow-2xs"
-          : "rounded-xl border border-border bg-card bg-card-subtle p-5 shadow-2xs",
+          ? "rounded-lg border border-border bg-card p-4 shadow-2xs"
+          : "rounded-xl border border-border bg-card p-5 shadow-2xs",
         "animate-fade-up motion-smooth",
         className,
       )}

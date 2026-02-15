@@ -5,6 +5,7 @@ import { useEffect, useId, useState } from "react";
 import { cn } from "@/src/lib/utils";
 
 import InfoTooltip from "./info-tooltip";
+import { getOccupancyBand } from "./status";
 
 interface GaugeProps {
   label: string;
@@ -13,13 +14,27 @@ interface GaugeProps {
 }
 
 function getGaugeColor(value: number): string {
-  if (value >= 60) {
+  const band = getOccupancyBand(value);
+
+  if (band === "running") {
     return "hsl(var(--status-running))";
   }
-  if (value >= 30) {
+  if (band === "idle") {
     return "hsl(var(--status-idle))";
   }
   return "hsl(var(--status-disconnected))";
+}
+
+function getGaugeBandLabel(value: number): string {
+  const band = getOccupancyBand(value);
+
+  if (band === "running") {
+    return "Good";
+  }
+  if (band === "idle") {
+    return "Below target";
+  }
+  return "Critical";
 }
 
 export default function Gauge({ label, value, size = "md" }: GaugeProps) {
@@ -37,8 +52,7 @@ export default function Gauge({ label, value, size = "md" }: GaugeProps) {
   const dashOffset = circumference - (normalized / 100) * circumference;
   const [animatedDashOffset, setAnimatedDashOffset] = useState(circumference);
   const color = getGaugeColor(normalized);
-  const statusText =
-    normalized >= 60 ? "Good" : normalized >= 30 ? "Below target" : "Critical";
+  const statusText = getGaugeBandLabel(normalized);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {

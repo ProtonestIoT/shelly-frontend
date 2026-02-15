@@ -16,6 +16,7 @@ import { formatChartDate, formatMinutes, formatPercent, formatShortDate } from "
 
 import DashboardCard from "./dashboard-card";
 import SectionHeading from "./section-heading";
+import { OCCUPANCY_IDLE_THRESHOLD, OCCUPANCY_RUNNING_THRESHOLD } from "./status";
 
 interface OccupancyChartProps {
   data: DayHistory[];
@@ -73,13 +74,13 @@ export default function OccupancyChart({ data }: OccupancyChartProps) {
             tickLine={false}
           />
           <ReferenceLine
-            y={60}
+            y={OCCUPANCY_RUNNING_THRESHOLD}
             stroke="hsl(var(--status-running))"
             strokeDasharray="4 4"
             strokeOpacity={0.4}
           />
           <ReferenceLine
-            y={30}
+            y={OCCUPANCY_IDLE_THRESHOLD}
             stroke="hsl(var(--status-disconnected))"
             strokeDasharray="4 4"
             strokeOpacity={0.4}

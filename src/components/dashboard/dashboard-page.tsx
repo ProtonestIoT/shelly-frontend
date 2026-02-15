@@ -12,7 +12,7 @@ import SheetPanel from "@/src/components/dashboard/sheet-panel";
 import StatusBlock from "@/src/components/dashboard/status-block";
 import { getStatusTheme } from "@/src/components/dashboard/status";
 import { useMachineData, useMachineList } from "@/src/hooks/use-machine-data";
-import { formatTime, formatTimestamp } from "@/src/lib/format";
+import { formatRelativeAge, formatTime, formatTimestamp } from "@/src/lib/format";
 
 function SkeletonCard({ className }: { className?: string }) {
   return (
@@ -55,6 +55,10 @@ export default function DashboardPage() {
   const hasData = Boolean(data);
   const hasError = Boolean(machineListError || error);
   const isBusy = machineListLoading || isInitialLoading || isRefreshing;
+  const lastUpdatedAge = data ? formatRelativeAge(data.machine.lastUpdated, now) : null;
+  const hasConnectionAlert = Boolean(
+    data && (isStale || data.machine.state === "DISCONNECTED"),
+  );
 
   return (
     <div className="min-h-screen text-foreground" aria-busy={isBusy}>
@@ -93,7 +97,10 @@ export default function DashboardPage() {
               <p className="text-sm text-muted-foreground" aria-live="polite">
                 Last updated:{" "}
                 {data ? (
-                  <time dateTime={data.machine.lastUpdated}>{formatTimestamp(data.machine.lastUpdated)}</time>
+                  <>
+                    <time dateTime={data.machine.lastUpdated}>{formatTimestamp(data.machine.lastUpdated)}</time>
+                    <span className="ml-1 text-foreground/80">({lastUpdatedAge})</span>
+                  </>
                 ) : (
                   "-"
                 )}
@@ -104,6 +111,24 @@ export default function DashboardPage() {
             </div>
           </div>
         </DashboardCard>
+
+        {hasConnectionAlert ? (
+          <DashboardCard
+            className="mb-4 border-status-disconnected/40 bg-status-disconnected/8 p-3 animate-fade-up-delay-1"
+            role="alert"
+          >
+            <p className="text-sm font-semibold text-status-disconnected uppercase tracking-wide">
+              {data?.machine.state === "DISCONNECTED"
+                ? "Machine Telemetry Disconnected"
+                : "Telemetry Stale"}
+            </p>
+            <p className="text-sm text-foreground">
+              {data?.machine.state === "DISCONNECTED"
+                ? "No live feed detected from machine power source. Verify sensor link and gateway connectivity."
+                : "Live feed is older than 5 minutes. Validate network path or data source health."}
+            </p>
+          </DashboardCard>
+        ) : null}
 
         {hasError ? (
           <DashboardCard

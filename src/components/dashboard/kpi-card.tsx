@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { TOOLTIP_COPY } from "@/src/lib/dashboard-copy";
 import { formatHours, formatMinutes, formatPercent } from "@/src/lib/format";
 import type { PeriodMetrics } from "@/src/types/dashboard";
 
@@ -92,18 +93,18 @@ export default function KpiCard({ title, data, weeklyBaselineHours, refreshKey }
       <div>
         <MetricRow
           label="Runtime"
-          tooltip="Runtime is the sum of intervals classified as active machine operation during the selected period."
+          tooltip={TOOLTIP_COPY.kpiRuntime}
           value={formatMinutes(data.runtimeMin)}
         />
         <MetricRow
           label="Elapsed"
-          tooltip="Elapsed is total observed period length. Occupancy = Runtime / Elapsed x 100."
+          tooltip={TOOLTIP_COPY.kpiElapsed}
           value={formatHours(data.elapsedMin)}
         />
         {data.highestScorePct !== null ? (
           <MetricRow
             label="Best Score"
-            tooltip="Best Score is the highest occupancy percentage achieved in any single session within this period."
+            tooltip={TOOLTIP_COPY.kpiBest}
             value={formatPercent(data.highestScorePct)}
           />
         ) : null}
@@ -111,7 +112,7 @@ export default function KpiCard({ title, data, weeklyBaselineHours, refreshKey }
 
       {title === "This Week" && typeof weeklyBaselineHours === "number" ? (
         <div className="mt-3 rounded-md border border-border bg-secondary px-3 py-2 text-sm text-secondary-foreground">
-          <InfoTooltip label="Weekly baseline represents the expected productive operating hours target for one calendar week.">
+          <InfoTooltip label={TOOLTIP_COPY.kpiWeeklyBaseline}>
             <button
               type="button"
               className="inline-flex w-full items-center justify-between text-left"

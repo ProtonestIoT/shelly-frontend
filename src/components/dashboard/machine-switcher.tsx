@@ -3,14 +3,10 @@
 import { ChevronDown } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 
-import type { MachineListItem, MachineStatus } from "@/src/types/dashboard";
+import type { MachineListItem } from "@/src/types/dashboard";
 import { cn } from "@/src/lib/utils";
 
-const stateColors: Record<MachineStatus, string> = {
-  RUNNING: "bg-status-running",
-  IDLE: "bg-status-idle",
-  DISCONNECTED: "bg-status-disconnected",
-};
+import { getStatusTheme } from "./status";
 
 interface MachineSwitcherProps {
   machines: MachineListItem[];
@@ -86,10 +82,13 @@ export default function MachineSwitcher({
             setOpen(false);
           }
         }}
-        className="motion-smooth flex w-full items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-semibold text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+        className="motion-smooth flex w-full items-center gap-2 rounded-lg border border-border bg-card px-3 py-2.5 text-sm font-semibold text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
       >
         {current ? (
-          <span className={cn("h-2 w-2 rounded-full", stateColors[current.state])} aria-hidden="true" />
+          <span
+            className={cn("h-2 w-2 rounded-full", getStatusTheme(current.state).dotClass)}
+            aria-hidden="true"
+          />
         ) : null}
         <span className="min-w-0 flex-1 truncate text-left">{current?.name ?? "Select Machine"}</span>
         <ChevronDown
@@ -144,12 +143,12 @@ export default function MachineSwitcher({
                 }
               }}
               className={cn(
-                "motion-smooth flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm hover:bg-white/8",
+                "motion-smooth flex w-full items-center gap-2.5 px-3 py-3 text-left text-sm hover:bg-white/8",
                 machine.id === selected && "bg-white/10 font-semibold",
               )}
             >
               <span
-                className={cn("h-2 w-2 shrink-0 rounded-full", stateColors[machine.state])}
+                className={cn("h-2 w-2 shrink-0 rounded-full", getStatusTheme(machine.state).dotClass)}
                 aria-hidden="true"
               />
               <span className="truncate">{machine.name}</span>

@@ -63,3 +63,15 @@ export function formatPercent(value: number): string {
 export function formatPowerWatts(powerWatts: number): string {
   return `${Math.round(powerWatts).toLocaleString()} W`;
 }
+
+export function formatRelativeAge(isoValue: string, now: Date): string {
+  const updated = new Date(isoValue).getTime();
+  const elapsedSeconds = Math.max(0, Math.round((now.getTime() - updated) / 1000));
+
+  if (elapsedSeconds < 60) {
+    return `${elapsedSeconds}s ago`;
+  }
+
+  const elapsedMinutes = Math.round(elapsedSeconds / 60);
+  return `${elapsedMinutes}m ago`;
+}

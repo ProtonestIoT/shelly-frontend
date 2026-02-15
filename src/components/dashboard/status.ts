@@ -7,6 +7,21 @@ interface StatusTheme {
   badgeClass: string;
 }
 
+export const OCCUPANCY_RUNNING_THRESHOLD = 60;
+export const OCCUPANCY_IDLE_THRESHOLD = 30;
+
+type OccupancyBand = "running" | "idle" | "disconnected";
+
+export function getOccupancyBand(value: number): OccupancyBand {
+  if (value >= OCCUPANCY_RUNNING_THRESHOLD) {
+    return "running";
+  }
+  if (value >= OCCUPANCY_IDLE_THRESHOLD) {
+    return "idle";
+  }
+  return "disconnected";
+}
+
 export function getStatusTheme(status: MachineStatus): StatusTheme {
   switch (status) {
     case "RUNNING":
@@ -52,10 +67,12 @@ export function getStatusColorValue(status: MachineStatus): string {
 }
 
 export function getPercentToneClass(value: number): string {
-  if (value >= 60) {
+  const band = getOccupancyBand(value);
+
+  if (band === "running") {
     return "text-status-running";
   }
-  if (value >= 30) {
+  if (band === "idle") {
     return "text-status-idle";
   }
   return "text-status-disconnected";
