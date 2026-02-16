@@ -46,6 +46,13 @@ export function getStatusTheme(status: MachineStatus): StatusTheme {
         badgeClass:
           "border-status-disconnected/30 bg-status-disconnected/12 text-status-disconnected",
       };
+    case "UNKNOWN":
+      return {
+        label: "Unknown",
+        toneClass: "text-muted-foreground",
+        dotClass: "bg-muted-foreground",
+        badgeClass: "border-border bg-secondary text-muted-foreground",
+      };
     default:
       return {
         label: "Unknown",
@@ -63,10 +70,17 @@ export function getStatusColorValue(status: MachineStatus): string {
   if (status === "IDLE") {
     return "var(--color-status-idle)";
   }
+  if (status === "DISCONNECTED") {
+    return "var(--color-status-disconnected)";
+  }
   return "var(--color-status-disconnected)";
 }
 
-export function getPercentToneClass(value: number): string {
+export function getPercentToneClass(value: number | null): string {
+  if (value === null) {
+    return "text-muted-foreground";
+  }
+
   const band = getOccupancyBand(value);
 
   if (band === "running") {

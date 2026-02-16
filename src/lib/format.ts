@@ -1,4 +1,8 @@
-export function formatMinutes(totalMinutes: number): string {
+export function formatMinutes(totalMinutes: number | null): string {
+  if (totalMinutes === null) {
+    return "--";
+  }
+
   const safeMinutes = Math.max(0, Math.round(totalMinutes));
   const hours = Math.floor(safeMinutes / 60);
   const minutes = safeMinutes % 60;
@@ -10,7 +14,11 @@ export function formatMinutes(totalMinutes: number): string {
   return `${hours}h ${minutes}m`;
 }
 
-export function formatHours(totalMinutes: number): string {
+export function formatHours(totalMinutes: number | null): string {
+  if (totalMinutes === null) {
+    return "--";
+  }
+
   const safeMinutes = Math.max(0, totalMinutes);
   const hours = safeMinutes / 60;
   return `${hours.toFixed(1)}h`;
@@ -56,11 +64,19 @@ export function formatShortDate(isoValue: string): string {
   }).format(date);
 }
 
-export function formatPercent(value: number): string {
+export function formatPercent(value: number | null): string {
+  if (value === null) {
+    return "--";
+  }
+
   return `${Math.round(value)}%`;
 }
 
-export function formatPowerWatts(powerWatts: number): string {
+export function formatPowerWatts(powerWatts: number | null): string {
+  if (powerWatts === null) {
+    return "--";
+  }
+
   return `${Math.round(powerWatts).toLocaleString()} W`;
 }
 

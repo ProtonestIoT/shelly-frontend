@@ -44,6 +44,13 @@ export default function KpiCard({ title, data, weeklyBaselineHours, refreshKey }
   const currentValueRef = useRef(0);
 
   useEffect(() => {
+    if (data.occupancyPct === null) {
+      setAnimatedOccupancy(0);
+      currentValueRef.current = 0;
+      hasInitializedRef.current = true;
+      return;
+    }
+
     const targetValue = Math.round(data.occupancyPct);
     const startValue = hasInitializedRef.current ? currentValueRef.current : 0;
 
@@ -84,8 +91,8 @@ export default function KpiCard({ title, data, weeklyBaselineHours, refreshKey }
       <SectionHeading className="mb-3">{title}</SectionHeading>
 
       <div className="mb-3">
-        <span className={`font-data text-4xl font-bold ${getPercentToneClass(animatedOccupancy)}`}>
-          {formatPercent(animatedOccupancy)}
+        <span className={`font-data text-4xl font-bold ${getPercentToneClass(data.occupancyPct)}`}>
+          {data.occupancyPct === null ? "--" : formatPercent(animatedOccupancy)}
         </span>
         <span className="ml-2 text-sm text-muted-foreground">occupancy</span>
       </div>

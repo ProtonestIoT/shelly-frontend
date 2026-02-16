@@ -1,16 +1,16 @@
-export type MachineStatus = "RUNNING" | "IDLE" | "DISCONNECTED";
+export type MachineStatus = "RUNNING" | "IDLE" | "DISCONNECTED" | "UNKNOWN";
 
 export interface DayHistory {
   date: string;
-  runtimeMin: number;
-  elapsedMin: number;
-  occupancyPct: number;
+  runtimeMin: number | null;
+  elapsedMin: number | null;
+  occupancyPct: number | null;
 }
 
 export interface PeriodMetrics {
-  runtimeMin: number;
-  elapsedMin: number;
-  occupancyPct: number;
+  runtimeMin: number | null;
+  elapsedMin: number | null;
+  occupancyPct: number | null;
   highestScorePct: number | null;
 }
 
@@ -30,7 +30,7 @@ export interface DashboardMachine {
   id: string;
   name: string;
   state: MachineStatus;
-  powerWatts: number;
+  powerWatts: number | null;
   lastUpdated: string;
 }
 
@@ -41,8 +41,8 @@ export interface DashboardData {
   sheet: {
     mode: "embed" | "link";
     url: string;
-  };
+  } | null;
   baseline: {
-    weeklyHours: number;
-  };
+    weeklyHours: number | null;
+  } | null;
 }

@@ -10,7 +10,7 @@ import { getStatusTheme } from "./status";
 
 interface StatusBlockProps {
   status: MachineStatus;
-  powerWatts: number;
+  powerWatts: number | null;
 }
 
 export default function StatusBlock({ status, powerWatts }: StatusBlockProps) {

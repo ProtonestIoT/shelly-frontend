@@ -9,7 +9,7 @@ import { getOccupancyBand } from "./status";
 
 interface GaugeProps {
   label: string;
-  value: number;
+  value: number | null;
   size?: "sm" | "md" | "lg";
 }
 
@@ -48,11 +48,12 @@ export default function Gauge({ label, value, size = "md" }: GaugeProps) {
   const strokeWidth = strokeWidths[size];
   const radius = (dimension - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
-  const normalized = Math.min(Math.max(Math.round(value), 0), 100);
+  const normalized =
+    typeof value === "number" ? Math.min(Math.max(Math.round(value), 0), 100) : 0;
   const dashOffset = circumference - (normalized / 100) * circumference;
   const [animatedDashOffset, setAnimatedDashOffset] = useState(circumference);
   const color = getGaugeColor(normalized);
-  const statusText = getGaugeBandLabel(normalized);
+  const statusText = typeof value === "number" ? getGaugeBandLabel(normalized) : "Unknown";
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -66,7 +67,13 @@ export default function Gauge({ label, value, size = "md" }: GaugeProps) {
 
   return (
     <div className="animate-soft-pop flex flex-1 items-center justify-center rounded-lg border border-border bg-card px-3 py-4">
-      <InfoTooltip label={`${label} occupancy: ${normalized}% - ${statusText}`}>
+      <InfoTooltip
+        label={
+          typeof value === "number"
+            ? `${label} occupancy: ${normalized}% - ${statusText}`
+            : `${label} occupancy is unavailable from current API`
+        }
+      >
         <button
           type="button"
           className="flex cursor-help flex-col items-center gap-1"
@@ -152,7 +159,7 @@ export default function Gauge({ label, value, size = "md" }: GaugeProps) {
               fontWeight="bold"
               fontFamily="'JetBrains Mono', monospace"
             >
-              {normalized}%
+              {typeof value === "number" ? `${normalized}%` : "--"}
             </text>
           </svg>
           <span

@@ -1,4 +1,5 @@
 import type { DashboardData, MachineListItem } from "@/src/types/dashboard";
+import { createLogger } from "@/src/lib/logging";
 
 export type {
   DashboardData,
@@ -10,177 +11,336 @@ export type {
   PeriodMetrics,
 } from "@/src/types/dashboard";
 
-const machineList: MachineListItem[] = [
-  { id: "cnc-01", name: "CNC-01", state: "RUNNING" },
-  { id: "cnc-02", name: "CNC-02", state: "IDLE" },
-  { id: "cnc-03", name: "CNC-03", state: "DISCONNECTED" },
-];
-
-function isoDaysAgo(daysAgo: number): string {
-  const date = new Date();
-  date.setDate(date.getDate() - daysAgo);
-  date.setHours(12, 0, 0, 0);
-  return date.toISOString();
+interface WsAuthResponse {
+  accessToken: string;
+  expiresAtMs: number;
 }
 
-const sharedSheetUrl =
-  "https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit?usp=sharing";
+interface MachineListResponse {
+  machines: MachineListItem[];
+}
 
-const dashboardByMachineId: Record<string, DashboardData> = {
-  "cnc-01": {
-    machine: {
-      id: "cnc-01",
-      name: "Mazak VCN 530C",
-      state: "RUNNING",
-      powerWatts: 1240,
-      lastUpdated: new Date().toISOString(),
-    },
-    periods: {
-      today: { runtimeMin: 320, elapsedMin: 480, occupancyPct: 67, highestScorePct: 88 },
-      week: {
-        runtimeMin: 2140,
-        elapsedMin: 3360,
-        occupancyPct: 64,
-        highestScorePct: 91,
-      },
-      month: {
-        runtimeMin: 8120,
-        elapsedMin: 12960,
-        occupancyPct: 63,
-        highestScorePct: 92,
-      },
-    },
-    history7d: [
-      { date: isoDaysAgo(6), runtimeMin: 270, elapsedMin: 480, occupancyPct: 56 },
-      { date: isoDaysAgo(5), runtimeMin: 310, elapsedMin: 480, occupancyPct: 65 },
-      { date: isoDaysAgo(4), runtimeMin: 330, elapsedMin: 480, occupancyPct: 69 },
-      { date: isoDaysAgo(3), runtimeMin: 285, elapsedMin: 480, occupancyPct: 59 },
-      { date: isoDaysAgo(2), runtimeMin: 340, elapsedMin: 480, occupancyPct: 71 },
-      { date: isoDaysAgo(1), runtimeMin: 315, elapsedMin: 480, occupancyPct: 66 },
-      { date: isoDaysAgo(0), runtimeMin: 320, elapsedMin: 480, occupancyPct: 67 },
-    ],
-    sheet: { mode: "embed", url: sharedSheetUrl },
-    baseline: { weeklyHours: 38.5 },
-  },
-  "cnc-02": {
-    machine: {
-      id: "cnc-02",
-      name: "Haas VF-2",
-      state: "IDLE",
-      powerWatts: 45,
-      lastUpdated: new Date().toISOString(),
-    },
-    periods: {
-      today: { runtimeMin: 190, elapsedMin: 480, occupancyPct: 40, highestScorePct: 61 },
-      week: {
-        runtimeMin: 1430,
-        elapsedMin: 3360,
-        occupancyPct: 43,
-        highestScorePct: 67,
-      },
-      month: {
-        runtimeMin: 5950,
-        elapsedMin: 12960,
-        occupancyPct: 46,
-        highestScorePct: 72,
-      },
-    },
-    history7d: [
-      { date: isoDaysAgo(6), runtimeMin: 155, elapsedMin: 480, occupancyPct: 32 },
-      { date: isoDaysAgo(5), runtimeMin: 210, elapsedMin: 480, occupancyPct: 44 },
-      { date: isoDaysAgo(4), runtimeMin: 170, elapsedMin: 480, occupancyPct: 35 },
-      { date: isoDaysAgo(3), runtimeMin: 215, elapsedMin: 480, occupancyPct: 45 },
-      { date: isoDaysAgo(2), runtimeMin: 198, elapsedMin: 480, occupancyPct: 41 },
-      { date: isoDaysAgo(1), runtimeMin: 205, elapsedMin: 480, occupancyPct: 43 },
-      { date: isoDaysAgo(0), runtimeMin: 190, elapsedMin: 480, occupancyPct: 40 },
-    ],
-    sheet: { mode: "link", url: sharedSheetUrl },
-    baseline: { weeklyHours: 38.5 },
-  },
-  "cnc-03": {
-    machine: {
-      id: "cnc-03",
-      name: "DMG Mori CMX 1100",
-      state: "DISCONNECTED",
-      powerWatts: 0,
-      lastUpdated: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
-    },
-    periods: {
-      today: { runtimeMin: 30, elapsedMin: 480, occupancyPct: 6, highestScorePct: null },
-      week: {
-        runtimeMin: 600,
-        elapsedMin: 3360,
-        occupancyPct: 18,
-        highestScorePct: 29,
-      },
-      month: {
-        runtimeMin: 4080,
-        elapsedMin: 12960,
-        occupancyPct: 31,
-        highestScorePct: 48,
-      },
-    },
-    history7d: [
-      { date: isoDaysAgo(6), runtimeMin: 95, elapsedMin: 480, occupancyPct: 20 },
-      { date: isoDaysAgo(5), runtimeMin: 60, elapsedMin: 480, occupancyPct: 13 },
-      { date: isoDaysAgo(4), runtimeMin: 25, elapsedMin: 480, occupancyPct: 5 },
-      { date: isoDaysAgo(3), runtimeMin: 0, elapsedMin: 480, occupancyPct: 0 },
-      { date: isoDaysAgo(2), runtimeMin: 110, elapsedMin: 480, occupancyPct: 23 },
-      { date: isoDaysAgo(1), runtimeMin: 80, elapsedMin: 480, occupancyPct: 17 },
-      { date: isoDaysAgo(0), runtimeMin: 30, elapsedMin: 480, occupancyPct: 6 },
-    ],
-    sheet: { mode: "link", url: sharedSheetUrl },
-    baseline: { weeklyHours: 38.5 },
-  },
-};
+interface DashboardResponse {
+  data: DashboardData;
+}
 
-function cloneData(data: DashboardData): DashboardData {
+interface RealtimeConnectionOptions {
+  machineId: string;
+  onStateTopicMessage: () => void;
+  onError: (message: string) => void;
+}
+
+interface PublicRealtimeConfig {
+  wsEnabled: boolean;
+  wsUrl: string | null;
+  stateTopicPrefix: string | null;
+  streamTopicPrefix: string | null;
+  totalWorktimeTopic: string;
+}
+
+interface WsConfigResponse {
+  config: PublicRealtimeConfig;
+}
+
+const log = createLogger("dashboard-api", "client");
+
+function jsonHeaders() {
   return {
-    ...data,
-    machine: { ...data.machine },
-    periods: {
-      today: { ...data.periods.today },
-      week: { ...data.periods.week },
-      month: { ...data.periods.month },
-    },
-    history7d: data.history7d.map((row) => ({ ...row })),
-    sheet: { ...data.sheet },
-    baseline: { ...data.baseline },
+    "Content-Type": "application/json",
   };
 }
 
-function applyLiveTimestamp(data: DashboardData): DashboardData {
-  if (data.machine.state === "DISCONNECTED") {
-    return data;
+async function parseJsonResponse<T>(response: Response): Promise<T> {
+  if (!response.ok) {
+    let detail = "";
+    try {
+      detail = await response.text();
+    } catch {
+      detail = "";
+    }
+
+    log.error("client_request_failed", {
+      status: response.status,
+      statusText: response.statusText,
+      detail,
+    });
+
+    throw new Error(
+      `Request failed (${response.status} ${response.statusText})${
+        detail ? `: ${detail}` : ""
+      }`,
+    );
   }
 
-  return {
-    ...data,
-    machine: {
-      ...data.machine,
-      lastUpdated: new Date().toISOString(),
-    },
-  };
+  log.debug("client_request_success", {
+    status: response.status,
+  });
+
+  return (await response.json()) as T;
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
+async function fetchWsAuthToken(): Promise<WsAuthResponse> {
+  const response = await fetch("/api/protonest/ws-auth", {
+    method: "GET",
+    headers: jsonHeaders(),
+    cache: "no-store",
   });
+
+  return parseJsonResponse<WsAuthResponse>(response);
+}
+
+async function fetchRealtimeConfig(): Promise<PublicRealtimeConfig> {
+  const response = await fetch("/api/protonest/ws-config", {
+    method: "GET",
+    headers: jsonHeaders(),
+    cache: "no-store",
+  });
+
+  const payload = await parseJsonResponse<WsConfigResponse>(response);
+  return payload.config;
+}
+
+function parseStompFrames(rawPayload: string): Array<Record<string, string> & { command: string; body: string }> {
+  const chunkList = rawPayload.split("\u0000").map((entry) => entry.trim()).filter(Boolean);
+
+  return chunkList
+    .map((chunk) => {
+      const lines = chunk.split("\n");
+      const command = lines[0]?.trim();
+
+      if (!command) {
+        return null;
+      }
+
+      const headers: Record<string, string> = {};
+      let cursor = 1;
+      while (cursor < lines.length && lines[cursor] !== "") {
+        const [key, ...valueParts] = lines[cursor].split(":");
+        headers[key] = valueParts.join(":");
+        cursor += 1;
+      }
+
+      const body = lines.slice(cursor + 1).join("\n");
+      return { command, body, ...headers };
+    })
+    .filter((frame): frame is Record<string, string> & { command: string; body: string } => frame !== null);
+}
+
+function buildStompFrame(command: string, headers: Record<string, string>, body = ""): string {
+  const headerBlock = Object.entries(headers)
+    .map(([key, value]) => `${key}:${value}`)
+    .join("\n");
+
+  return `${command}\n${headerBlock}\n\n${body}\u0000`;
+}
+
+function messageMatchesTopic(body: string, totalWorktimeTopic: string): boolean {
+  try {
+    const payload = JSON.parse(body) as Record<string, unknown>;
+    const topicCandidates = [
+      payload.topic,
+      payload.mqttTopic,
+      payload.topicName,
+      payload.suffix,
+      payload.key,
+      payload.name,
+    ];
+
+    return topicCandidates.some(
+      (candidate) =>
+        typeof candidate === "string" &&
+        candidate.trim().toLowerCase() === totalWorktimeTopic.trim().toLowerCase(),
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function connectRealtimeMachineUpdates({
+  machineId,
+  onStateTopicMessage,
+  onError,
+}: RealtimeConnectionOptions): () => void {
+  let socket: WebSocket | null = null;
+  let reconnectTimer: number | null = null;
+  let isDisposed = false;
+  let attempt = 0;
+
+  const openConnection = async () => {
+    if (isDisposed) {
+      return;
+    }
+
+    try {
+      log.info("ws_connect_start", {
+        machineId,
+        attempt,
+      });
+
+      const config = await fetchRealtimeConfig();
+      if (!config.wsEnabled) {
+        log.info("ws_disabled_by_config", {
+          machineId,
+        });
+        return;
+      }
+
+      if (!config.wsUrl || !config.stateTopicPrefix || !config.streamTopicPrefix) {
+        throw new Error("Realtime websocket config is incomplete.");
+      }
+
+      const auth = await fetchWsAuthToken();
+      socket = new WebSocket(config.wsUrl);
+
+      socket.addEventListener("open", () => {
+        if (!socket || isDisposed) {
+          return;
+        }
+
+        attempt = 0;
+        log.info("ws_open", {
+          machineId,
+        });
+        socket.send(
+          buildStompFrame("CONNECT", {
+            "accept-version": "1.2",
+            "heart-beat": "10000,10000",
+            Authorization: `Bearer ${auth.accessToken}`,
+          }),
+        );
+      });
+
+      socket.addEventListener("message", (event) => {
+        const payload = typeof event.data === "string" ? event.data : "";
+        const frames = parseStompFrames(payload);
+
+        for (const frame of frames) {
+          if (frame.command === "CONNECTED") {
+            log.info("ws_connected_subscribing", {
+              machineId,
+            });
+
+            socket?.send(
+              buildStompFrame("SUBSCRIBE", {
+                id: `state-${machineId}`,
+                destination: `${config.stateTopicPrefix}/${machineId}`,
+              }),
+            );
+
+            socket?.send(
+              buildStompFrame("SUBSCRIBE", {
+                id: `stream-${machineId}`,
+                destination: `${config.streamTopicPrefix}/${machineId}`,
+              }),
+            );
+            continue;
+          }
+
+          if (frame.command === "MESSAGE" && messageMatchesTopic(frame.body, config.totalWorktimeTopic)) {
+            log.debug("ws_totalworktime_message", {
+              machineId,
+            });
+            onStateTopicMessage();
+            continue;
+          }
+
+          if (frame.command === "ERROR") {
+            log.error("ws_protocol_error", {
+              machineId,
+            });
+            onError("Realtime connection returned a protocol error.");
+          }
+        }
+      });
+
+      socket.addEventListener("close", () => {
+        if (isDisposed) {
+          return;
+        }
+
+        attempt += 1;
+        const backoff = Math.min(15_000, Math.round(500 * 2 ** attempt + Math.random() * 250));
+        log.warn("ws_closed_reconnecting", {
+          machineId,
+          attempt,
+          backoff,
+        });
+        reconnectTimer = window.setTimeout(() => {
+          void openConnection();
+        }, backoff);
+      });
+
+      socket.addEventListener("error", () => {
+        log.error("ws_error", {
+          machineId,
+        });
+        onError("Realtime websocket error.");
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to open realtime connection.";
+      log.error("ws_connect_failed", {
+        machineId,
+        attempt,
+        message,
+      });
+      onError(message);
+
+      attempt += 1;
+      const backoff = Math.min(15_000, Math.round(500 * 2 ** attempt + Math.random() * 250));
+      reconnectTimer = window.setTimeout(() => {
+        void openConnection();
+      }, backoff);
+    }
+  };
+
+  void openConnection();
+
+  return () => {
+    isDisposed = true;
+
+    if (reconnectTimer !== null) {
+      window.clearTimeout(reconnectTimer);
+    }
+
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      log.info("ws_cleanup_close", {
+        machineId,
+      });
+      socket.close(1000, "Client cleanup");
+    }
+  };
 }
 
 export async function fetchMachineList(): Promise<MachineListItem[]> {
-  await delay(180);
-  return machineList.map((machine) => ({ ...machine }));
+  log.debug("machine_list_fetch_start");
+  const response = await fetch("/api/protonest/machines", {
+    method: "GET",
+    headers: jsonHeaders(),
+    cache: "no-store",
+  });
+
+  const payload = await parseJsonResponse<MachineListResponse>(response);
+  log.info("machine_list_fetch_success", {
+    count: payload.machines.length,
+  });
+  return payload.machines;
 }
 
 export async function fetchDashboardData(machineId: string): Promise<DashboardData> {
-  await delay(240);
-  const selected = dashboardByMachineId[machineId];
+  log.debug("dashboard_fetch_start", {
+    machineId,
+  });
 
-  if (!selected) {
-    throw new Error("No dashboard data available for selected machine.");
-  }
+  const response = await fetch(`/api/protonest/dashboard/${encodeURIComponent(machineId)}`, {
+    method: "GET",
+    headers: jsonHeaders(),
+    cache: "no-store",
+  });
 
-  return applyLiveTimestamp(cloneData(selected));
+  const payload = await parseJsonResponse<DashboardResponse>(response);
+  log.info("dashboard_fetch_success", {
+    machineId,
+    state: payload.data.machine.state,
+  });
+  return payload.data;
 }

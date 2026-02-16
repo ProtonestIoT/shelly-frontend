@@ -92,6 +92,7 @@ export default function OccupancyChart({ data }: OccupancyChartProps) {
           <Line
             type="monotone"
             dataKey="occupancyPct"
+            connectNulls={false}
             isAnimationActive
             animationDuration={900}
             animationEasing="ease-out"

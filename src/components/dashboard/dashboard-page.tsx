@@ -57,7 +57,10 @@ export default function DashboardPage() {
   const isBusy = machineListLoading || isInitialLoading || isRefreshing;
   const lastUpdatedAge = data ? formatRelativeAge(data.machine.lastUpdated, now) : null;
   const hasConnectionAlert = Boolean(
-    data && (isStale || data.machine.state === "DISCONNECTED"),
+    data && (isStale || data.machine.state === "DISCONNECTED" || data.machine.state === "UNKNOWN"),
+  );
+  const hasChartData = Boolean(
+    data?.history7d?.some((row) => typeof row.occupancyPct === "number"),
   );
 
   return (
@@ -117,16 +120,20 @@ export default function DashboardPage() {
             className="mb-4 border-status-disconnected/40 bg-status-disconnected/8 p-3 animate-fade-up-delay-1"
             role="alert"
           >
-            <p className="text-sm font-semibold text-status-disconnected uppercase tracking-wide">
-              {data?.machine.state === "DISCONNECTED"
-                ? "Machine Telemetry Disconnected"
-                : "Telemetry Stale"}
-            </p>
-            <p className="text-sm text-foreground">
-              {data?.machine.state === "DISCONNECTED"
-                ? "No live feed detected from machine power source. Verify sensor link and gateway connectivity."
-                : "Live feed is older than 5 minutes. Validate network path or data source health."}
-            </p>
+              <p className="text-sm font-semibold text-status-disconnected uppercase tracking-wide">
+               {data?.machine.state === "DISCONNECTED"
+                 ? "Machine Telemetry Disconnected"
+                 : data?.machine.state === "UNKNOWN"
+                   ? "Machine Telemetry Partial"
+                   : "Telemetry Stale"}
+             </p>
+             <p className="text-sm text-foreground">
+               {data?.machine.state === "DISCONNECTED"
+                 ? "No live feed detected from machine power source. Verify sensor link and gateway connectivity."
+                 : data?.machine.state === "UNKNOWN"
+                   ? "Realtime total worktime is available, but status/power metrics are not exposed by current APIs yet."
+                 : "Live feed is older than 5 minutes. Validate network path or data source health."}
+             </p>
           </DashboardCard>
         ) : null}
 
@@ -191,7 +198,7 @@ export default function DashboardPage() {
                   <KpiCard
                     title="This Week"
                     data={data.periods.week}
-                    weeklyBaselineHours={data.baseline?.weeklyHours}
+                    weeklyBaselineHours={data.baseline?.weeklyHours ?? undefined}
                     refreshKey={data.machine.lastUpdated}
                   />
                 </div>
@@ -218,7 +225,7 @@ export default function DashboardPage() {
               </DashboardCard>
             ) : null}
 
-            {data.history7d?.length ? (
+            {hasChartData ? (
               <div className="animate-fade-up animate-fade-up-delay-2">
                 <OccupancyChart data={data.history7d} />
               </div>
