@@ -299,12 +299,24 @@ export function connectRealtimeMachineUpdates({
         throw new Error("Realtime websocket config is incomplete.");
       }
 
-      const auth = await fetchWsAuthToken();
+      const wsBaseUrl = config.wsUrl;
       client = new Client({
-        brokerURL: buildBrokerUrlWithToken(config.wsUrl, auth.accessToken),
+        brokerURL: wsBaseUrl,
         reconnectDelay: 5000,
         heartbeatIncoming: 4000,
         heartbeatOutgoing: 4000,
+        beforeConnect: async () => {
+          if (!client || isDisposed) {
+            return;
+          }
+
+          const auth = await fetchWsAuthToken();
+          client.brokerURL = buildBrokerUrlWithToken(wsBaseUrl, auth.accessToken);
+          log.debug("ws_auth_token_refreshed", {
+            machineId,
+            expiresAtMs: auth.expiresAtMs,
+          });
+        },
         debug: (message: string) => {
           log.debug("ws_debug", { machineId, message });
         },
