@@ -1,21 +1,17 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-
 import { TOOLTIP_COPY } from "@/src/lib/dashboard-copy";
-import { formatHours, formatMinutes, formatPercent } from "@/src/lib/format";
+import { formatHours, formatPercent } from "@/src/lib/format";
 import type { PeriodMetrics } from "@/src/types/dashboard";
 
 import DashboardCard from "./dashboard-card";
 import InfoTooltip from "./info-tooltip";
 import SectionHeading from "./section-heading";
-import { getPercentToneClass } from "./status";
 
 interface KpiCardProps {
   title: "Today" | "This Week" | "This Month";
   data: PeriodMetrics;
   weeklyBaselineHours?: number;
-  refreshKey?: string;
 }
 
 function MetricRow({ label, tooltip, value }: { label: string; tooltip: string; value: string }) {
@@ -38,79 +34,32 @@ function MetricRow({ label, tooltip, value }: { label: string; tooltip: string; 
   );
 }
 
-export default function KpiCard({ title, data, weeklyBaselineHours, refreshKey }: KpiCardProps) {
-  const [animatedOccupancy, setAnimatedOccupancy] = useState(0);
-  const hasInitializedRef = useRef(false);
-  const currentValueRef = useRef(0);
-
-  useEffect(() => {
-    if (data.occupancyPct === null) {
-      setAnimatedOccupancy(0);
-      currentValueRef.current = 0;
-      hasInitializedRef.current = true;
-      return;
-    }
-
-    const targetValue = Math.round(data.occupancyPct);
-    const startValue = hasInitializedRef.current ? currentValueRef.current : 0;
-
-    if (startValue === targetValue) {
-      setAnimatedOccupancy(targetValue);
-      currentValueRef.current = targetValue;
-      hasInitializedRef.current = true;
-      return;
-    }
-
-    const durationMs = 700;
-    const start = performance.now();
-    let frameId = 0;
-
-    frameId = window.requestAnimationFrame(function tick(now) {
-      const progress = Math.min((now - start) / durationMs, 1);
-      const eased = 1 - (1 - progress) * (1 - progress);
-      const nextValue = Math.round(startValue + (targetValue - startValue) * eased);
-      setAnimatedOccupancy(nextValue);
-      currentValueRef.current = nextValue;
-
-      if (progress < 1) {
-        frameId = window.requestAnimationFrame(tick);
-      } else {
-        setAnimatedOccupancy(targetValue);
-        currentValueRef.current = targetValue;
-        hasInitializedRef.current = true;
-      }
-    });
-
-    return () => {
-      window.cancelAnimationFrame(frameId);
-    };
-  }, [data.occupancyPct, refreshKey]);
-
+export default function KpiCard({ title, data, weeklyBaselineHours }: KpiCardProps) {
   return (
     <DashboardCard className="h-full lg:min-h-[250px]">
       <SectionHeading className="mb-3">{title}</SectionHeading>
 
       <div className="mb-3">
-        <span className={`font-data text-4xl font-bold ${getPercentToneClass(data.occupancyPct)}`}>
-          {data.occupancyPct === null ? "--" : formatPercent(animatedOccupancy)}
+        <span className="font-data text-4xl font-bold text-foreground">
+          {formatHours(data.runtimeHours)}
         </span>
-        <span className="ml-2 text-sm text-muted-foreground">occupancy</span>
+        <span className="ml-2 text-sm text-muted-foreground">runtime</span>
       </div>
 
       <div>
         <MetricRow
           label="Runtime"
           tooltip={TOOLTIP_COPY.kpiRuntime}
-          value={formatMinutes(data.runtimeMin)}
+          value={formatHours(data.runtimeHours)}
         />
         <MetricRow
           label="Elapsed"
           tooltip={TOOLTIP_COPY.kpiElapsed}
-          value={formatHours(data.elapsedMin)}
+          value={formatHours(data.elapsedHours)}
         />
-        {data.highestScorePct !== null ? (
+        {title !== "Today" ? (
           <MetricRow
-            label="Best Score"
+            label="Best Utilization"
             tooltip={TOOLTIP_COPY.kpiBest}
             value={formatPercent(data.highestScorePct)}
           />

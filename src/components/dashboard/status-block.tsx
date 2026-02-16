@@ -33,18 +33,20 @@ export default function StatusBlock({ status, powerWatts }: StatusBlockProps) {
         </InfoTooltip>
       </div>
 
-      <div className="space-y-4">
+      <div className="flex flex-col gap-4">
         <InfoTooltip label={TOOLTIP_COPY.statusCurrent}>
           <button
             type="button"
-            className="motion-smooth inline-flex items-center gap-3 rounded-lg border border-border bg-secondary px-3 py-2"
+            className={`motion-smooth inline-flex items-center gap-3 rounded-lg border px-3 py-2 ${statusTheme.badgeClass}`}
             aria-label="Current machine status details"
           >
             <span
               className={`h-3 w-3 animate-pulse-status rounded-full ${statusTheme.dotClass}`}
               aria-hidden="true"
             />
-            <span className={`text-3xl leading-none tracking-wide ${statusTheme.toneClass}`}>
+            <span
+              className={`text-3xl leading-none tracking-wide ${statusTheme.toneClass}`}
+            >
               {status}
             </span>
           </button>

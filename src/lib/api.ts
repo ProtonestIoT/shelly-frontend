@@ -1,4 +1,9 @@
-import type { DashboardData, MachineListItem } from "@/src/types/dashboard";
+import type {
+  DashboardData,
+  MachineListItem,
+  MachineStatus,
+} from "@/src/types/dashboard";
+import { Client, type IFrame, type IMessage } from "@stomp/stompjs";
 import { createLogger } from "@/src/lib/logging";
 
 export type {
@@ -24,9 +29,23 @@ interface DashboardResponse {
   data: DashboardData;
 }
 
+interface ElapsedUpdateResponse {
+  ok: boolean;
+}
+
+export interface RealtimeStateSnapshot {
+  status: MachineStatus | null;
+  timestamp: string | null;
+  payload: Record<string, unknown> | null;
+  topic: string | null;
+}
+
 interface RealtimeConnectionOptions {
   machineId: string;
-  onStateTopicMessage: () => void;
+  channelId: string | null;
+  stateChannelIds: string[];
+  onStateTopicMessage: (next: RealtimeStateSnapshot) => void;
+  onPowerUpdate: (powerWatts: number | null) => void;
   onError: (message: string) => void;
 }
 
@@ -35,7 +54,8 @@ interface PublicRealtimeConfig {
   wsUrl: string | null;
   stateTopicPrefix: string | null;
   streamTopicPrefix: string | null;
-  totalWorktimeTopic: string;
+  stateTopicFallback: string | null;
+  streamPowerTopic: string | null;
 }
 
 interface WsConfigResponse {
@@ -100,41 +120,7 @@ async function fetchRealtimeConfig(): Promise<PublicRealtimeConfig> {
   return payload.config;
 }
 
-function parseStompFrames(rawPayload: string): Array<Record<string, string> & { command: string; body: string }> {
-  const chunkList = rawPayload.split("\u0000").map((entry) => entry.trim()).filter(Boolean);
-
-  return chunkList
-    .map((chunk) => {
-      const lines = chunk.split("\n");
-      const command = lines[0]?.trim();
-
-      if (!command) {
-        return null;
-      }
-
-      const headers: Record<string, string> = {};
-      let cursor = 1;
-      while (cursor < lines.length && lines[cursor] !== "") {
-        const [key, ...valueParts] = lines[cursor].split(":");
-        headers[key] = valueParts.join(":");
-        cursor += 1;
-      }
-
-      const body = lines.slice(cursor + 1).join("\n");
-      return { command, body, ...headers };
-    })
-    .filter((frame): frame is Record<string, string> & { command: string; body: string } => frame !== null);
-}
-
-function buildStompFrame(command: string, headers: Record<string, string>, body = ""): string {
-  const headerBlock = Object.entries(headers)
-    .map(([key, value]) => `${key}:${value}`)
-    .join("\n");
-
-  return `${command}\n${headerBlock}\n\n${body}\u0000`;
-}
-
-function messageMatchesTopic(body: string, totalWorktimeTopic: string): boolean {
+function readMessageTopic(body: string): string | null {
   try {
     const payload = JSON.parse(body) as Record<string, unknown>;
     const topicCandidates = [
@@ -146,25 +132,145 @@ function messageMatchesTopic(body: string, totalWorktimeTopic: string): boolean 
       payload.name,
     ];
 
-    return topicCandidates.some(
-      (candidate) =>
-        typeof candidate === "string" &&
-        candidate.trim().toLowerCase() === totalWorktimeTopic.trim().toLowerCase(),
-    );
+    for (const candidate of topicCandidates) {
+      if (typeof candidate === "string" && candidate.trim()) {
+        return candidate.trim();
+      }
+    }
+
+    return null;
   } catch {
+    return null;
+  }
+}
+
+function messageMatchesTopic(body: string, expectedTopic: string): boolean {
+  const topic = readMessageTopic(body);
+  if (!topic) {
     return false;
   }
+
+  return topic.toLowerCase() === expectedTopic.trim().toLowerCase();
+}
+
+function messageMatchesAnyTopic(body: string, expectedTopics: string[]): boolean {
+  return expectedTopics.some((topic) => messageMatchesTopic(body, topic));
+}
+
+function readPowerWatts(body: string): number | null {
+  try {
+    const payload = JSON.parse(body) as {
+      payload?: {
+        act_power?: unknown;
+      };
+    };
+
+    const actPower = payload.payload?.act_power;
+    if (typeof actPower === "number" && Number.isFinite(actPower)) {
+      return Math.max(0, actPower);
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+function toMachineStatus(value: unknown): MachineStatus | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    if (value === 1) {
+      return "RUNNING";
+    }
+    if (value === 0 || value === 2) {
+      return "IDLE";
+    }
+
+    return "UNKNOWN";
+  }
+
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "running") {
+    return "RUNNING";
+  }
+  if (normalized === "idle") {
+    return "IDLE";
+  }
+  if (normalized === "disconnected") {
+    return "DISCONNECTED";
+  }
+
+  return "UNKNOWN";
+}
+
+function readStateMessage(body: string): RealtimeStateSnapshot {
+  try {
+    const payload = JSON.parse(body) as {
+      payload?: Record<string, unknown>;
+      timestamp?: unknown;
+      topic?: unknown;
+    };
+
+    const rawPayload = payload.payload;
+    const statusValue =
+      rawPayload && typeof rawPayload === "object" ? rawPayload.status : undefined;
+
+    return {
+      status: toMachineStatus(statusValue),
+      timestamp:
+        typeof payload.timestamp === "string" && payload.timestamp.trim()
+          ? payload.timestamp
+          : null,
+      payload:
+        rawPayload && typeof rawPayload === "object" ? rawPayload : null,
+      topic:
+        typeof payload.topic === "string" && payload.topic.trim()
+          ? payload.topic.trim()
+          : null,
+    };
+  } catch {
+    return {
+      status: null,
+      timestamp: null,
+      payload: null,
+      topic: null,
+    };
+  }
+}
+
+function buildExpectedTopics(channelTopic: string | null, fallbackTopic: string | null): string[] {
+  const topicSet = new Set<string>();
+
+  if (channelTopic) {
+    topicSet.add(channelTopic.trim().toLowerCase());
+  }
+  if (fallbackTopic) {
+    topicSet.add(fallbackTopic.trim().toLowerCase());
+  }
+
+  return [...topicSet];
+}
+
+function buildBrokerUrlWithToken(wsUrl: string, accessToken: string): string {
+  const separator = wsUrl.includes("?") ? "&" : "?";
+  return `${wsUrl}${separator}token=${encodeURIComponent(accessToken)}`;
 }
 
 export function connectRealtimeMachineUpdates({
   machineId,
+  channelId,
+  stateChannelIds,
   onStateTopicMessage,
+  onPowerUpdate,
   onError,
 }: RealtimeConnectionOptions): () => void {
-  let socket: WebSocket | null = null;
+  let client: Client | null = null;
   let reconnectTimer: number | null = null;
   let isDisposed = false;
-  let attempt = 0;
+  let setupAttempt = 0;
 
   const openConnection = async () => {
     if (isDisposed) {
@@ -174,7 +280,7 @@ export function connectRealtimeMachineUpdates({
     try {
       log.info("ws_connect_start", {
         machineId,
-        attempt,
+        attempt: setupAttempt,
       });
 
       const config = await fetchRealtimeConfig();
@@ -185,108 +291,109 @@ export function connectRealtimeMachineUpdates({
         return;
       }
 
-      if (!config.wsUrl || !config.stateTopicPrefix || !config.streamTopicPrefix) {
+      if (
+        !config.wsUrl ||
+        !config.stateTopicPrefix ||
+        !config.streamTopicPrefix
+      ) {
         throw new Error("Realtime websocket config is incomplete.");
       }
 
       const auth = await fetchWsAuthToken();
-      socket = new WebSocket(config.wsUrl);
+      client = new Client({
+        brokerURL: buildBrokerUrlWithToken(config.wsUrl, auth.accessToken),
+        reconnectDelay: 5000,
+        heartbeatIncoming: 4000,
+        heartbeatOutgoing: 4000,
+        debug: (message: string) => {
+          log.debug("ws_debug", { machineId, message });
+        },
+        onConnect: () => {
+          setupAttempt = 0;
+          const stateTopics = [
+            ...new Set([
+              ...stateChannelIds.map((stateChannel) => `frontend/${stateChannel}`.toLowerCase()),
+              ...buildExpectedTopics(
+                channelId ? `frontend/${channelId}` : null,
+                config.stateTopicFallback,
+              ),
+            ]),
+          ];
+          const streamTopics = buildExpectedTopics(
+            channelId ? `status/${channelId}` : null,
+            config.streamPowerTopic,
+          );
 
-      socket.addEventListener("open", () => {
-        if (!socket || isDisposed) {
-          return;
-        }
-
-        attempt = 0;
-        log.info("ws_open", {
-          machineId,
-        });
-        socket.send(
-          buildStompFrame("CONNECT", {
-            "accept-version": "1.2",
-            "heart-beat": "10000,10000",
-            Authorization: `Bearer ${auth.accessToken}`,
-          }),
-        );
-      });
-
-      socket.addEventListener("message", (event) => {
-        const payload = typeof event.data === "string" ? event.data : "";
-        const frames = parseStompFrames(payload);
-
-        for (const frame of frames) {
-          if (frame.command === "CONNECTED") {
-            log.info("ws_connected_subscribing", {
-              machineId,
-            });
-
-            socket?.send(
-              buildStompFrame("SUBSCRIBE", {
-                id: `state-${machineId}`,
-                destination: `${config.stateTopicPrefix}/${machineId}`,
-              }),
-            );
-
-            socket?.send(
-              buildStompFrame("SUBSCRIBE", {
-                id: `stream-${machineId}`,
-                destination: `${config.streamTopicPrefix}/${machineId}`,
-              }),
-            );
-            continue;
+          if (stateTopics.length === 0 || streamTopics.length === 0) {
+            onError("Realtime websocket config is incomplete.");
+            return;
           }
+          log.info("ws_connected_subscribing", {
+            machineId,
+          });
 
-          if (frame.command === "MESSAGE" && messageMatchesTopic(frame.body, config.totalWorktimeTopic)) {
-            log.debug("ws_totalworktime_message", {
-              machineId,
-            });
-            onStateTopicMessage();
-            continue;
-          }
+          client?.subscribe(`${config.stateTopicPrefix}/${machineId}`, (message: IMessage) => {
+            if (messageMatchesAnyTopic(message.body, stateTopics)) {
+              const receivedTopic = readMessageTopic(message.body);
+              const nextState = readStateMessage(message.body);
+              log.debug("ws_state_message", {
+                machineId,
+                topic: receivedTopic,
+                status: nextState.status,
+              });
+              onStateTopicMessage(nextState);
+            }
+          });
 
-          if (frame.command === "ERROR") {
-            log.error("ws_protocol_error", {
-              machineId,
-            });
-            onError("Realtime connection returned a protocol error.");
-          }
-        }
+          client?.subscribe(`${config.streamTopicPrefix}/${machineId}`, (message: IMessage) => {
+            if (messageMatchesAnyTopic(message.body, streamTopics)) {
+              const receivedTopic = readMessageTopic(message.body);
+              const powerWatts = readPowerWatts(message.body);
+              log.debug("ws_stream_message", {
+                machineId,
+                topic: receivedTopic,
+                powerWatts,
+              });
+              onPowerUpdate(powerWatts);
+            }
+          });
+        },
+        onStompError: (frame: IFrame) => {
+          const message = frame.headers.message ?? "Realtime STOMP protocol error.";
+          log.error("ws_protocol_error", {
+            machineId,
+            message,
+            details: frame.body,
+          });
+          onError(message);
+        },
+        onWebSocketError: () => {
+          log.error("ws_error", {
+            machineId,
+          });
+          onError("Realtime websocket error.");
+        },
+        onWebSocketClose: (event: CloseEvent) => {
+          log.warn("ws_closed", {
+            machineId,
+            code: event.code,
+            reason: event.reason,
+          });
+        },
       });
 
-      socket.addEventListener("close", () => {
-        if (isDisposed) {
-          return;
-        }
-
-        attempt += 1;
-        const backoff = Math.min(15_000, Math.round(500 * 2 ** attempt + Math.random() * 250));
-        log.warn("ws_closed_reconnecting", {
-          machineId,
-          attempt,
-          backoff,
-        });
-        reconnectTimer = window.setTimeout(() => {
-          void openConnection();
-        }, backoff);
-      });
-
-      socket.addEventListener("error", () => {
-        log.error("ws_error", {
-          machineId,
-        });
-        onError("Realtime websocket error.");
-      });
+      client.activate();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to open realtime connection.";
       log.error("ws_connect_failed", {
         machineId,
-        attempt,
+        attempt: setupAttempt,
         message,
       });
       onError(message);
 
-      attempt += 1;
-      const backoff = Math.min(15_000, Math.round(500 * 2 ** attempt + Math.random() * 250));
+      setupAttempt += 1;
+      const backoff = Math.min(15_000, Math.round(500 * 2 ** setupAttempt + Math.random() * 250));
       reconnectTimer = window.setTimeout(() => {
         void openConnection();
       }, backoff);
@@ -302,12 +409,10 @@ export function connectRealtimeMachineUpdates({
       window.clearTimeout(reconnectTimer);
     }
 
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      log.info("ws_cleanup_close", {
-        machineId,
-      });
-      socket.close(1000, "Client cleanup");
-    }
+    log.info("ws_cleanup_close", {
+      machineId,
+    });
+    void client?.deactivate();
   };
 }
 
@@ -326,12 +431,22 @@ export async function fetchMachineList(): Promise<MachineListItem[]> {
   return payload.machines;
 }
 
-export async function fetchDashboardData(machineId: string): Promise<DashboardData> {
+export async function fetchDashboardData(
+  machineId: string,
+  channelId: string | null,
+): Promise<DashboardData> {
   log.debug("dashboard_fetch_start", {
     machineId,
   });
 
-  const response = await fetch(`/api/protonest/dashboard/${encodeURIComponent(machineId)}`, {
+  const params = new URLSearchParams();
+  if (channelId) {
+    params.set("channel", channelId);
+  }
+  const query = params.toString();
+  const endpoint = `/api/protonest/dashboard/${encodeURIComponent(machineId)}${query ? `?${query}` : ""}`;
+
+  const response = await fetch(endpoint, {
     method: "GET",
     headers: jsonHeaders(),
     cache: "no-store",
@@ -340,7 +455,30 @@ export async function fetchDashboardData(machineId: string): Promise<DashboardDa
   const payload = await parseJsonResponse<DashboardResponse>(response);
   log.info("dashboard_fetch_success", {
     machineId,
-    state: payload.data.machine.state,
+    status: payload.data.machine.status,
   });
   return payload.data;
+}
+
+export async function updateElapsedTime(machineId: string, hours: number): Promise<void> {
+  log.debug("elapsed_update_start", {
+    machineId,
+    hours,
+  });
+
+  const response = await fetch(`/api/protonest/elapsed/${encodeURIComponent(machineId)}`, {
+    method: "POST",
+    headers: jsonHeaders(),
+    cache: "no-store",
+    body: JSON.stringify({
+      hours,
+    }),
+  });
+
+  await parseJsonResponse<ElapsedUpdateResponse>(response);
+
+  log.info("elapsed_update_success", {
+    machineId,
+    hours,
+  });
 }

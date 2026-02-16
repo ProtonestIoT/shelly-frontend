@@ -15,7 +15,8 @@ export async function GET() {
         machines: config.machineCatalog.map((machine) => ({
           id: machine.id,
           name: machine.name,
-          state: "UNKNOWN",
+          status: "UNKNOWN",
+          channels: machine.channels,
         })),
       },
       {

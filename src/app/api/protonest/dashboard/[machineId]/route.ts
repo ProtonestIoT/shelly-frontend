@@ -13,10 +13,13 @@ interface Params {
 
 export async function GET(_request: Request, { params }: Params) {
   try {
+    const requestUrl = new URL(_request.url);
+    const channelRaw = requestUrl.searchParams.get("channel");
+    const channel = channelRaw?.trim() || null;
     const { machineId } = await params;
     log.debug("request_start", { machineId });
-    const data = await fetchMachineStateDashboardData(machineId);
-    log.info("request_success", { machineId, state: data.machine.state });
+    const data = await fetchMachineStateDashboardData(machineId, channel);
+    log.info("request_success", { machineId, status: data.machine.status });
 
     return NextResponse.json(
       { data },

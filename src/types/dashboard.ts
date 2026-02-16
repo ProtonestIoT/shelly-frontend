@@ -2,15 +2,15 @@ export type MachineStatus = "RUNNING" | "IDLE" | "DISCONNECTED" | "UNKNOWN";
 
 export interface DayHistory {
   date: string;
-  runtimeMin: number | null;
-  elapsedMin: number | null;
-  occupancyPct: number | null;
+  runtimeHours: number | null;
+  elapsedHours: number | null;
+  utilizationPct: number | null;
 }
 
 export interface PeriodMetrics {
-  runtimeMin: number | null;
-  elapsedMin: number | null;
-  occupancyPct: number | null;
+  runtimeHours: number | null;
+  elapsedHours: number | null;
+  utilizationPct: number | null;
   highestScorePct: number | null;
 }
 
@@ -23,13 +23,14 @@ export interface DashboardPeriods {
 export interface MachineListItem {
   id: string;
   name: string;
-  state: MachineStatus;
+  status: MachineStatus;
+  channels: string[];
 }
 
 export interface DashboardMachine {
   id: string;
   name: string;
-  state: MachineStatus;
+  status: MachineStatus;
   powerWatts: number | null;
   lastUpdated: string;
 }

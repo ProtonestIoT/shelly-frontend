@@ -18,8 +18,8 @@ const monoFont = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "CNC Machine Occupancy Dashboard",
-  description: "Live CNC occupancy monitoring from power readings",
+  title: "CNC Machine Utilization Dashboard",
+  description: "Live CNC utilization monitoring from power readings",
 };
 
 export default function RootLayout({

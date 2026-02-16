@@ -1,27 +1,10 @@
-export function formatMinutes(totalMinutes: number | null): string {
-  if (totalMinutes === null) {
+export function formatHours(totalHours: number | null): string {
+  if (totalHours === null) {
     return "--";
   }
 
-  const safeMinutes = Math.max(0, Math.round(totalMinutes));
-  const hours = Math.floor(safeMinutes / 60);
-  const minutes = safeMinutes % 60;
-
-  if (hours === 0) {
-    return `${minutes}m`;
-  }
-
-  return `${hours}h ${minutes}m`;
-}
-
-export function formatHours(totalMinutes: number | null): string {
-  if (totalMinutes === null) {
-    return "--";
-  }
-
-  const safeMinutes = Math.max(0, totalMinutes);
-  const hours = safeMinutes / 60;
-  return `${hours.toFixed(1)}h`;
+  const safeHours = Math.max(0, totalHours);
+  return `${safeHours.toFixed(1)}h`;
 }
 
 export function formatTimestamp(isoValue: string): string {

@@ -1,13 +1,27 @@
 interface MachineCatalogEntry {
   id: string;
   name: string;
+  channels: string[];
+}
+
+function parseChannelFromTopic(topic: string, prefix: string): string | null {
+  const normalizedPrefix = `${prefix}/`;
+  if (!topic.startsWith(normalizedPrefix)) {
+    return null;
+  }
+
+  const channel = topic.slice(normalizedPrefix.length).trim();
+  return channel || null;
 }
 
 export interface ProtonestServerConfig {
   apiBaseUrl: string;
   authEmail: string;
   authPassword: string;
-  totalWorktimeTopic: string;
+  stateTopicFallback: string;
+  elapsedTimeTopic: string;
+  streamPowerTopic: string;
+  googleSheetUrl: string | null;
   machineCatalog: MachineCatalogEntry[];
 }
 
@@ -15,7 +29,10 @@ export function getServerConfig(): ProtonestServerConfig {
   const apiBaseUrl = process.env.PROTONEST_API_BASE_URL?.trim();
   const authEmail = process.env.PROTONEST_AUTH_EMAIL?.trim();
   const authPassword = process.env.PROTONEST_AUTH_PASSWORD?.trim();
-  const totalWorktimeTopic = process.env.PROTONEST_TOTALWORKTIME_TOPIC?.trim();
+  const stateTopicFallback = process.env.PROTONEST_STATE_TOPIC_FALLBACK?.trim();
+  const elapsedTimeTopic = process.env.PROTONEST_ELAPSEDTIME_TOPIC?.trim();
+  const streamPowerTopic = process.env.PROTONEST_STREAM_POWER_TOPIC?.trim();
+  const googleSheetUrl = process.env.PROTONEST_GOOGLE_SHEET_URL?.trim() || null;
   const machineCatalogRaw = process.env.PROTONEST_MACHINE_CATALOG_JSON;
 
   if (!apiBaseUrl) {
@@ -28,8 +45,16 @@ export function getServerConfig(): ProtonestServerConfig {
     );
   }
 
-  if (!totalWorktimeTopic) {
-    throw new Error("PROTONEST_TOTALWORKTIME_TOPIC is not configured.");
+  if (!stateTopicFallback) {
+    throw new Error("PROTONEST_STATE_TOPIC_FALLBACK is not configured.");
+  }
+
+  if (!elapsedTimeTopic) {
+    throw new Error("PROTONEST_ELAPSEDTIME_TOPIC is not configured.");
+  }
+
+  if (!streamPowerTopic) {
+    throw new Error("PROTONEST_STREAM_POWER_TOPIC is not configured.");
   }
 
   if (!machineCatalogRaw) {
@@ -47,6 +72,24 @@ export function getServerConfig(): ProtonestServerConfig {
     throw new Error("PROTONEST_MACHINE_CATALOG_JSON must be a JSON array.");
   }
 
+  const fallbackChannelSet = new Set<string>();
+  const fallbackStateChannel = parseChannelFromTopic(stateTopicFallback, "frontend");
+  const fallbackStreamChannel = parseChannelFromTopic(streamPowerTopic, "status");
+
+  if (fallbackStateChannel) {
+    fallbackChannelSet.add(fallbackStateChannel);
+  }
+  if (fallbackStreamChannel) {
+    fallbackChannelSet.add(fallbackStreamChannel);
+  }
+  if (fallbackChannelSet.size === 0) {
+    throw new Error(
+      "No fallback channel could be derived. Configure PROTONEST_STATE_TOPIC_FALLBACK and PROTONEST_STREAM_POWER_TOPIC with channel-qualified topics or define channels per machine in PROTONEST_MACHINE_CATALOG_JSON.",
+    );
+  }
+
+  const fallbackChannels = [...fallbackChannelSet];
+
   const normalized = machineCatalog.map((entry, index) => {
     if (!entry || typeof entry !== "object") {
       throw new Error(
@@ -57,21 +100,34 @@ export function getServerConfig(): ProtonestServerConfig {
     const candidate = entry as Record<string, unknown>;
     const id = typeof candidate.id === "string" ? candidate.id.trim() : "";
     const name = typeof candidate.name === "string" ? candidate.name.trim() : "";
+    const channelsRaw = candidate.channels;
+    const channels =
+      Array.isArray(channelsRaw) && channelsRaw.every((value) => typeof value === "string")
+        ? channelsRaw
+            .map((value) => value.trim())
+            .filter(
+              (value, channelIndex, values) =>
+                value.length > 0 && values.indexOf(value) === channelIndex,
+            )
+        : fallbackChannels;
 
-    if (!id || !name) {
+    if (!id || !name || channels.length === 0) {
       throw new Error(
-        `PROTONEST_MACHINE_CATALOG_JSON item at index ${index} must include non-empty id and name.`,
+        `PROTONEST_MACHINE_CATALOG_JSON item at index ${index} must include non-empty id, name, and channels.`,
       );
     }
 
-    return { id, name };
+    return { id, name, channels };
   });
 
   return {
     apiBaseUrl,
     authEmail,
     authPassword,
-    totalWorktimeTopic,
+    stateTopicFallback,
+    elapsedTimeTopic,
+    streamPowerTopic,
+    googleSheetUrl,
     machineCatalog: normalized,
   };
 }

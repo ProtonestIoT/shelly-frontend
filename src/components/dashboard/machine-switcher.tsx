@@ -1,10 +1,7 @@
 "use client";
 
-import { ChevronDown } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
-
 import type { MachineListItem } from "@/src/types/dashboard";
-import { cn } from "@/src/lib/utils";
+import ListboxSwitcher from "@/src/components/dashboard/listbox-switcher";
 
 import { getStatusTheme } from "./status";
 
@@ -21,144 +18,23 @@ export default function MachineSwitcher({
   onSelect,
   disabled = false,
 }: MachineSwitcherProps) {
-  const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const triggerRef = useRef<HTMLButtonElement | null>(null);
-  const optionsRef = useRef<Array<HTMLButtonElement | null>>([]);
-  const listboxId = useId();
-  const current = machines.find((machine) => machine.id === selected);
-
-  useEffect(() => {
-    function handleOutsideClick(event: MouseEvent) {
-      if (!containerRef.current?.contains(event.target as Node)) {
-        setOpen(false);
-      }
-    }
-
-    document.addEventListener("mousedown", handleOutsideClick);
-    return () => {
-      document.removeEventListener("mousedown", handleOutsideClick);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    const selectedIndex = machines.findIndex((machine) => machine.id === selected);
-    const fallbackIndex = selectedIndex >= 0 ? selectedIndex : 0;
-    optionsRef.current[fallbackIndex]?.focus();
-  }, [machines, open, selected]);
-
-  function focusOption(index: number) {
-    const lastIndex = machines.length - 1;
-    if (lastIndex < 0) {
-      return;
-    }
-
-    const wrappedIndex = index < 0 ? lastIndex : index > lastIndex ? 0 : index;
-    optionsRef.current[wrappedIndex]?.focus();
-  }
+  const items = machines.map((machine) => ({
+    id: machine.id,
+    label: machine.name,
+    dotClass: getStatusTheme(machine.status).dotClass,
+    meta: machine.status,
+  }));
 
   return (
-    <div ref={containerRef} className="relative">
-      <button
-        ref={triggerRef}
-        type="button"
-        disabled={disabled || machines.length === 0}
-        aria-haspopup="listbox"
-        aria-controls={open ? listboxId : undefined}
-        aria-expanded={open}
-        aria-label="Select machine"
-        onClick={() => setOpen((previous) => !previous)}
-        onKeyDown={(event) => {
-          if (event.key === "ArrowDown") {
-            event.preventDefault();
-            setOpen(true);
-          }
-          if (event.key === "Escape") {
-            event.preventDefault();
-            setOpen(false);
-          }
-        }}
-        className="motion-smooth flex w-full items-center gap-2 rounded-lg border border-border bg-card px-3 py-2.5 text-sm font-semibold text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        {current ? (
-          <span
-            className={cn("h-2 w-2 rounded-full", getStatusTheme(current.state).dotClass)}
-            aria-hidden="true"
-          />
-        ) : null}
-        <span className="min-w-0 flex-1 truncate text-left">{current?.name ?? "Select Machine"}</span>
-        <ChevronDown
-          className={cn(
-            "h-4 w-4 shrink-0 text-muted-foreground motion-smooth",
-            open && "rotate-180",
-          )}
-        />
-      </button>
-
-      {open ? (
-        <div
-          id={listboxId}
-          role="listbox"
-          aria-label="Machine list"
-          className="animate-soft-pop absolute left-0 top-full z-50 mt-1 w-56 rounded-lg border border-overlay-border bg-overlay text-overlay-foreground shadow-lg"
-        >
-          {machines.map((machine, index) => (
-            <button
-              key={machine.id}
-              type="button"
-              role="option"
-              aria-selected={machine.id === selected}
-              ref={(element) => {
-                optionsRef.current[index] = element;
-              }}
-              onClick={() => {
-                onSelect(machine.id);
-                setOpen(false);
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "ArrowDown") {
-                  event.preventDefault();
-                  focusOption(index + 1);
-                }
-                if (event.key === "ArrowUp") {
-                  event.preventDefault();
-                  focusOption(index - 1);
-                }
-                if (event.key === "Home") {
-                  event.preventDefault();
-                  focusOption(0);
-                }
-                if (event.key === "End") {
-                  event.preventDefault();
-                  focusOption(machines.length - 1);
-                }
-                if (event.key === "Escape") {
-                  event.preventDefault();
-                  setOpen(false);
-                  triggerRef.current?.focus();
-                }
-              }}
-              className={cn(
-                "motion-smooth flex w-full items-center gap-2.5 px-3 py-3 text-left text-sm hover:bg-white/8",
-                machine.id === selected && "bg-white/10 font-semibold",
-              )}
-            >
-              <span
-                className={cn("h-2 w-2 shrink-0 rounded-full", getStatusTheme(machine.state).dotClass)}
-                aria-hidden="true"
-              />
-              <span className="truncate">{machine.name}</span>
-              <span className="ml-auto text-[10px] tracking-wider text-overlay-foreground/70 uppercase font-data">
-                {machine.state}
-              </span>
-            </button>
-          ))}
-        </div>
-      ) : null}
-    </div>
+    <ListboxSwitcher
+      items={items}
+      selected={selected}
+      onSelect={onSelect}
+      disabled={disabled}
+      triggerAriaLabel="Select machine"
+      listAriaLabel="Machine list"
+      placeholder="Select Machine"
+      menuWidthClass="w-56"
+    />
   );
 }

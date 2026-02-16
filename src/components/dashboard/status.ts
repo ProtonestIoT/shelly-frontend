@@ -7,16 +7,16 @@ interface StatusTheme {
   badgeClass: string;
 }
 
-export const OCCUPANCY_RUNNING_THRESHOLD = 60;
-export const OCCUPANCY_IDLE_THRESHOLD = 30;
+export const UTILIZATION_RUNNING_THRESHOLD = 60;
+export const UTILIZATION_IDLE_THRESHOLD = 30;
 
-type OccupancyBand = "running" | "idle" | "disconnected";
+type UtilizationBand = "running" | "idle" | "disconnected";
 
-export function getOccupancyBand(value: number): OccupancyBand {
-  if (value >= OCCUPANCY_RUNNING_THRESHOLD) {
+export function getUtilizationBand(value: number): UtilizationBand {
+  if (value >= UTILIZATION_RUNNING_THRESHOLD) {
     return "running";
   }
-  if (value >= OCCUPANCY_IDLE_THRESHOLD) {
+  if (value >= UTILIZATION_IDLE_THRESHOLD) {
     return "idle";
   }
   return "disconnected";
@@ -81,7 +81,7 @@ export function getPercentToneClass(value: number | null): string {
     return "text-muted-foreground";
   }
 
-  const band = getOccupancyBand(value);
+  const band = getUtilizationBand(value);
 
   if (band === "running") {
     return "text-status-running";

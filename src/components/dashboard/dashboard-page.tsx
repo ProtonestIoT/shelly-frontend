@@ -3,16 +3,21 @@
 import { useEffect, useMemo, useState } from "react";
 
 import DashboardCard from "@/src/components/dashboard/dashboard-card";
+import ChannelSwitcher from "@/src/components/dashboard/channel-switcher";
 import Gauge from "@/src/components/dashboard/gauge";
 import KpiCard from "@/src/components/dashboard/kpi-card";
 import MachineSwitcher from "@/src/components/dashboard/machine-switcher";
-import OccupancyChart from "@/src/components/dashboard/occupancy-chart";
-import SectionHeading from "@/src/components/dashboard/section-heading";
 import SheetPanel from "@/src/components/dashboard/sheet-panel";
 import StatusBlock from "@/src/components/dashboard/status-block";
-import { getStatusTheme } from "@/src/components/dashboard/status";
+import UtilizationChart from "@/src/components/dashboard/utilization-chart";
 import { useMachineData, useMachineList } from "@/src/hooks/use-machine-data";
-import { formatRelativeAge, formatTime, formatTimestamp } from "@/src/lib/format";
+import {
+  ELAPSED_HOURS_MAX,
+  ELAPSED_HOURS_MIN,
+  ELAPSED_HOURS_STEP,
+  isElapsedHoursInRange,
+} from "@/src/lib/elapsed";
+import { formatTime } from "@/src/lib/format";
 
 function SkeletonCard({ className }: { className?: string }) {
   return (
@@ -29,13 +34,46 @@ function SkeletonCard({ className }: { className?: string }) {
 
 export default function DashboardPage() {
   const [selectedMachineId, setSelectedMachineId] = useState<string | null>(null);
+  const [selectedChannelByMachine, setSelectedChannelByMachine] = useState<Record<string, string>>({});
   const [now, setNow] = useState(() => new Date());
+  const [elapsedDraftByMachine, setElapsedDraftByMachine] = useState<Record<string, string>>({});
+  const [elapsedSaveMessage, setElapsedSaveMessage] = useState<string | null>(null);
 
   const { machines, isLoading: machineListLoading, error: machineListError } = useMachineList();
 
   const activeMachineId = selectedMachineId ?? machines[0]?.id ?? null;
+  const activeMachine = machines.find((machine) => machine.id === activeMachineId);
+  const availableChannels = activeMachine?.channels ?? [];
+  const activeChannel = (() => {
+    if (!activeMachineId) {
+      return null;
+    }
 
-  const { data, error, isInitialLoading, isRefreshing, isStale } = useMachineData(activeMachineId);
+    const selectedChannel = selectedChannelByMachine[activeMachineId];
+    if (selectedChannel && availableChannels.includes(selectedChannel)) {
+      return selectedChannel;
+    }
+
+    return availableChannels[0] ?? null;
+  })();
+
+  const { data, error, isInitialLoading, isRefreshing, isStale, isUpdatingElapsed, saveElapsedHours } =
+    useMachineData(activeMachineId, activeChannel, availableChannels);
+
+  const machinesWithLiveStatus = useMemo(
+    () =>
+      machines.map((machine) => {
+        if (machine.id === activeMachineId && data) {
+          return {
+            ...machine,
+            status: data.machine.status,
+          };
+        }
+
+        return machine;
+      }),
+    [activeMachineId, data, machines],
+  );
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -47,21 +85,51 @@ export default function DashboardPage() {
     };
   }, []);
 
-  const statusTheme = useMemo(
-    () => getStatusTheme(data?.machine.state ?? "DISCONNECTED"),
-    [data?.machine.state],
-  );
-
   const hasData = Boolean(data);
   const hasError = Boolean(machineListError || error);
   const isBusy = machineListLoading || isInitialLoading || isRefreshing;
-  const lastUpdatedAge = data ? formatRelativeAge(data.machine.lastUpdated, now) : null;
   const hasConnectionAlert = Boolean(
-    data && (isStale || data.machine.state === "DISCONNECTED" || data.machine.state === "UNKNOWN"),
+    data && (isStale || data.machine.status === "DISCONNECTED" || data.machine.status === "UNKNOWN"),
   );
-  const hasChartData = Boolean(
-    data?.history7d?.some((row) => typeof row.occupancyPct === "number"),
-  );
+  const hasChartData = Boolean(data?.history7d?.length);
+  const elapsedInput = (() => {
+    if (!activeMachineId) {
+      return "";
+    }
+
+    const draft = elapsedDraftByMachine[activeMachineId];
+    if (draft !== undefined) {
+      return draft;
+    }
+
+    const serverElapsed = data?.periods.today.elapsedHours;
+    return typeof serverElapsed === "number" && Number.isFinite(serverElapsed)
+      ? serverElapsed.toFixed(2)
+      : "";
+  })();
+
+  async function handleElapsedSave() {
+    const parsed = Number(elapsedInput);
+    if (!Number.isFinite(parsed) || !isElapsedHoursInRange(parsed)) {
+      setElapsedSaveMessage(
+        `Elapsed time must be between ${ELAPSED_HOURS_MIN} and ${ELAPSED_HOURS_MAX} hours.`,
+      );
+      return;
+    }
+
+    try {
+      await saveElapsedHours(parsed);
+      if (activeMachineId) {
+        setElapsedDraftByMachine((current) => ({
+          ...current,
+          [activeMachineId]: parsed.toFixed(2),
+        }));
+      }
+      setElapsedSaveMessage("Elapsed time updated.");
+    } catch {
+      setElapsedSaveMessage("Failed to update elapsed time.");
+    }
+  }
 
   return (
     <div className="min-h-screen text-foreground" aria-busy={isBusy}>
@@ -70,46 +138,45 @@ export default function DashboardPage() {
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex flex-col gap-3 md:flex-row md:items-center">
               <MachineSwitcher
-                machines={machines}
+                machines={machinesWithLiveStatus}
                 selected={activeMachineId}
                 onSelect={setSelectedMachineId}
                 disabled={machineListLoading}
               />
 
+              <div className="inline-flex items-center gap-2">
+                <span className="text-xs font-semibold tracking-[0.18em] text-muted-foreground uppercase">
+                  Channel
+                </span>
+                <ChannelSwitcher
+                  channels={availableChannels}
+                  selected={activeChannel}
+                  disabled={machineListLoading || !activeMachineId || availableChannels.length === 0}
+                  onSelect={(channel) => {
+                    if (activeMachineId) {
+                      setSelectedChannelByMachine((current) => ({
+                        ...current,
+                        [activeMachineId]: channel,
+                      }));
+                    }
+                  }}
+                />
+              </div>
+
               {hasData ? (
                 <div className="flex flex-wrap items-center gap-2">
-                  <div
-                    className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold uppercase ${statusTheme.badgeClass}`}
-                  >
-                    <span className={`h-2 w-2 animate-pulse-status rounded-full ${statusTheme.dotClass}`} />
-                    {statusTheme.label}
-                  </div>
                   {isStale ? (
                     <span className="rounded-full border border-status-disconnected/30 bg-status-disconnected/10 px-2 py-1 text-xs font-medium text-status-disconnected">
                       Stale (&gt;5m)
                     </span>
                   ) : null}
-                  <span className="text-xs text-muted-foreground" aria-live="polite">
-                    {isRefreshing ? "Refreshing..." : "Live updates every 10s"}
-                  </span>
                 </div>
               ) : null}
             </div>
 
             <div className="text-left lg:text-right">
-              <p className="text-sm text-muted-foreground" aria-live="polite">
-                Last updated:{" "}
-                {data ? (
-                  <>
-                    <time dateTime={data.machine.lastUpdated}>{formatTimestamp(data.machine.lastUpdated)}</time>
-                    <span className="ml-1 text-foreground/80">({lastUpdatedAge})</span>
-                  </>
-                ) : (
-                  "-"
-                )}
-              </p>
               <p className="font-data text-lg text-foreground">
-                Local time: <time dateTime={now.toISOString()}>{formatTime(now)}</time>
+                Local time: <time dateTime={now.toISOString()} suppressHydrationWarning>{formatTime(now)}</time>
               </p>
             </div>
           </div>
@@ -121,19 +188,19 @@ export default function DashboardPage() {
             role="alert"
           >
               <p className="text-sm font-semibold text-status-disconnected uppercase tracking-wide">
-               {data?.machine.state === "DISCONNECTED"
-                 ? "Machine Telemetry Disconnected"
-                 : data?.machine.state === "UNKNOWN"
-                   ? "Machine Telemetry Partial"
-                   : "Telemetry Stale"}
+               {data?.machine.status === "DISCONNECTED"
+                  ? "Machine Telemetry Disconnected"
+                  : data?.machine.status === "UNKNOWN"
+                    ? "Machine Telemetry Partial"
+                    : "Telemetry Stale"}
              </p>
              <p className="text-sm text-foreground">
-               {data?.machine.state === "DISCONNECTED"
-                 ? "No live feed detected from machine power source. Verify sensor link and gateway connectivity."
-                 : data?.machine.state === "UNKNOWN"
-                   ? "Realtime total worktime is available, but status/power metrics are not exposed by current APIs yet."
-                 : "Live feed is older than 5 minutes. Validate network path or data source health."}
-             </p>
+                 {data?.machine.status === "DISCONNECTED"
+                   ? "No live feed detected from machine power source. Verify sensor link and gateway connectivity."
+                   : data?.machine.status === "UNKNOWN"
+                     ? "Realtime runtime and power are available, but machine status mapping is not configured yet."
+                   : "Live feed is older than 5 minutes. Validate network path or data source health."}
+              </p>
           </DashboardCard>
         ) : null}
 
@@ -182,14 +249,13 @@ export default function DashboardPage() {
           <main className="relative z-0 space-y-4 sm:space-y-6">
             <section className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
               <div className="h-full animate-fade-up animate-fade-up-delay-1">
-                <StatusBlock status={data.machine.state} powerWatts={data.machine.powerWatts} />
+                <StatusBlock status={data.machine.status} powerWatts={data.machine.powerWatts} />
               </div>
               {data.periods?.today ? (
                 <div className="h-full animate-fade-up animate-fade-up-delay-1">
                   <KpiCard
                     title="Today"
                     data={data.periods.today}
-                    refreshKey={data.machine.lastUpdated}
                   />
                 </div>
               ) : null}
@@ -199,7 +265,6 @@ export default function DashboardPage() {
                     title="This Week"
                     data={data.periods.week}
                     weeklyBaselineHours={data.baseline?.weeklyHours ?? undefined}
-                    refreshKey={data.machine.lastUpdated}
                   />
                 </div>
               ) : null}
@@ -208,26 +273,69 @@ export default function DashboardPage() {
                   <KpiCard
                     title="This Month"
                     data={data.periods.month}
-                    refreshKey={data.machine.lastUpdated}
                   />
                 </div>
               ) : null}
             </section>
 
+            <DashboardCard className="animate-fade-up-delay-2 p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                <label className="flex flex-1 flex-col gap-1">
+                  <span className="text-xs font-semibold tracking-[0.18em] text-muted-foreground uppercase">
+                    Elapsed Hours
+                  </span>
+                  <input
+                    type="number"
+                    min={ELAPSED_HOURS_MIN}
+                    max={ELAPSED_HOURS_MAX}
+                    step={ELAPSED_HOURS_STEP}
+                    value={elapsedInput}
+                    onChange={(event) => {
+                      if (activeMachineId) {
+                        setElapsedDraftByMachine((current) => ({
+                          ...current,
+                          [activeMachineId]: event.target.value,
+                        }));
+                      }
+                      if (elapsedSaveMessage) {
+                        setElapsedSaveMessage(null);
+                      }
+                    }}
+                    className="h-10 rounded-md border border-border bg-card px-3 text-sm text-foreground outline-none ring-offset-0 placeholder:text-muted-foreground focus:border-primary"
+                    placeholder={`Enter ${ELAPSED_HOURS_MIN}-${ELAPSED_HOURS_MAX} hours`}
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void handleElapsedSave();
+                  }}
+                  disabled={isUpdatingElapsed || !activeMachineId}
+                  className="h-10 rounded-md border border-primary/40 bg-primary/12 px-4 text-sm font-semibold text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isUpdatingElapsed ? "Saving..." : "Update Elapsed"}
+                </button>
+              </div>
+              {elapsedSaveMessage ? (
+                <p className="mt-2 text-xs text-muted-foreground" aria-live="polite">
+                  {elapsedSaveMessage}
+                </p>
+              ) : null}
+            </DashboardCard>
+
             {data.periods ? (
               <DashboardCard className="animate-fade-up-delay-2">
-                <SectionHeading>Utilization Gauges</SectionHeading>
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                  <Gauge label="Today" value={data.periods.today.occupancyPct} />
-                  <Gauge label="Week" value={data.periods.week.occupancyPct} />
-                  <Gauge label="Month" value={data.periods.month.occupancyPct} />
+                  <Gauge label="Today" value={data.periods.today.utilizationPct} />
+                  <Gauge label="Week" value={data.periods.week.utilizationPct} />
+                  <Gauge label="Month" value={data.periods.month.utilizationPct} />
                 </div>
               </DashboardCard>
             ) : null}
 
             {hasChartData ? (
               <div className="animate-fade-up animate-fade-up-delay-2">
-                <OccupancyChart data={data.history7d} />
+                <UtilizationChart data={data.history7d} />
               </div>
             ) : null}
 

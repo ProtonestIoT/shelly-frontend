@@ -5,7 +5,7 @@ import { useEffect, useId, useState } from "react";
 import { cn } from "@/src/lib/utils";
 
 import InfoTooltip from "./info-tooltip";
-import { getOccupancyBand } from "./status";
+import { getUtilizationBand } from "./status";
 
 interface GaugeProps {
   label: string;
@@ -14,7 +14,7 @@ interface GaugeProps {
 }
 
 function getGaugeColor(value: number): string {
-  const band = getOccupancyBand(value);
+  const band = getUtilizationBand(value);
 
   if (band === "running") {
     return "hsl(var(--status-running))";
@@ -26,7 +26,7 @@ function getGaugeColor(value: number): string {
 }
 
 function getGaugeBandLabel(value: number): string {
-  const band = getOccupancyBand(value);
+  const band = getUtilizationBand(value);
 
   if (band === "running") {
     return "Good";
@@ -70,8 +70,8 @@ export default function Gauge({ label, value, size = "md" }: GaugeProps) {
       <InfoTooltip
         label={
           typeof value === "number"
-            ? `${label} occupancy: ${normalized}% - ${statusText}`
-            : `${label} occupancy is unavailable from current API`
+            ? `${label} utilization: ${normalized}% - ${statusText}`
+            : `${label} utilization is unavailable from current API`
         }
       >
         <button

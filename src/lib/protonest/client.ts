@@ -1,4 +1,8 @@
-import type { DashboardData, DayHistory, MachineStatus } from "@/src/types/dashboard";
+import type {
+  DashboardData,
+  DayHistory,
+  MachineStatus,
+} from "@/src/types/dashboard";
 
 import { createLogger } from "@/src/lib/logging";
 import { getServerConfig } from "./config";
@@ -11,9 +15,21 @@ interface TokenResponse {
 interface StateResponse {
   status: string;
   data: {
-    payload: Record<string, number>;
+    payload: Record<string, unknown>;
     timestamp?: string;
   };
+}
+
+interface ElapsedPayload {
+  hours?: string | number;
+}
+
+function toStateDetailsTopic(channel: string | null, fallbackTopic: string): string {
+  if (!channel) {
+    return fallbackTopic;
+  }
+
+  return `frontend/${channel}`;
 }
 
 interface TokenCache {
@@ -37,7 +53,9 @@ function parseJwtExpiryMs(jwtToken: string): number {
     }
 
     const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
-    const json = JSON.parse(Buffer.from(normalized, "base64").toString("utf8")) as {
+    const json = JSON.parse(
+      Buffer.from(normalized, "base64").toString("utf8"),
+    ) as {
       exp?: number;
     };
 
@@ -45,7 +63,7 @@ function parseJwtExpiryMs(jwtToken: string): number {
       return json.exp * 1000;
     }
   } catch {
-    // Ignore and fallback to short-lived value.
+    return Date.now() + 5 * 60_000;
   }
 
   return Date.now() + 5 * 60_000;
@@ -143,20 +161,35 @@ async function requestFreshToken(): Promise<TokenCache> {
   return next;
 }
 
-async function requestRefreshedToken(refreshToken: string): Promise<TokenCache> {
+async function requestRefreshedToken(
+  refreshToken: string,
+): Promise<TokenCache> {
   log.info("token_fetch_start", {
     mode: "refresh",
     hasRefreshToken: Boolean(refreshToken),
   });
 
-  const payload = await protonestRequest<TokenResponse>(
-    "/api/v1/user/get-new-token",
-    {
-      method: "GET",
-      body: JSON.stringify({ refreshToken }),
-    },
-    false,
-  );
+  let payload: TokenResponse;
+
+  try {
+    payload = await protonestRequest<TokenResponse>(
+      "/api/v1/user/get-new-token",
+      {
+        method: "GET",
+        body: JSON.stringify({ refreshToken }),
+      },
+      false,
+    );
+  } catch {
+    const query = new URLSearchParams({ refreshToken }).toString();
+    payload = await protonestRequest<TokenResponse>(
+      `/api/v1/user/get-new-token?${query}`,
+      {
+        method: "GET",
+      },
+      false,
+    );
+  }
 
   const next: TokenCache = {
     accessToken: payload.jwtToken,
@@ -182,7 +215,10 @@ export async function getServerSessionToken(): Promise<{
     log.debug("token_cache_hit", {
       expiresAtMs: tokenCache.expiresAtMs,
     });
-    return { accessToken: tokenCache.accessToken, expiresAtMs: tokenCache.expiresAtMs };
+    return {
+      accessToken: tokenCache.accessToken,
+      expiresAtMs: tokenCache.expiresAtMs,
+    };
   }
 
   if (!tokenRefreshInFlight) {
@@ -193,7 +229,10 @@ export async function getServerSessionToken(): Promise<{
           return await requestRefreshedToken(tokenCache.refreshToken);
         } catch (error) {
           log.warn("token_refresh_failed_fallback_fresh", {
-            message: error instanceof Error ? error.message : "Unknown token refresh error.",
+            message:
+              error instanceof Error
+                ? error.message
+                : "Unknown token refresh error.",
           });
           return requestFreshToken();
         }
@@ -220,7 +259,11 @@ function toIsoFromDdMmYyyy(value: string): string | null {
   const month = Number(monthRaw);
   const year = Number(yearRaw);
 
-  if (!Number.isInteger(day) || !Number.isInteger(month) || !Number.isInteger(year)) {
+  if (
+    !Number.isInteger(day) ||
+    !Number.isInteger(month) ||
+    !Number.isInteger(year)
+  ) {
     return null;
   }
 
@@ -228,17 +271,78 @@ function toIsoFromDdMmYyyy(value: string): string | null {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
-function toStatus(): MachineStatus {
-  // TODO: Map machine RUNNING/IDLE/DISCONNECTED from a dedicated status topic once available.
-  // Current `frontend/totalworktime` payload does not include machine execution state.
+function toStatus(value: unknown): MachineStatus {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    if (value === 1) {
+      return "RUNNING";
+    }
+    if (value === 0 || value === 2) {
+      return "IDLE";
+    }
+
+    return "UNKNOWN";
+  }
+
+  if (typeof value !== "string") {
+    return "UNKNOWN";
+  }
+
+  const normalized = value.trim().toLowerCase();
+
+  if (normalized === "running") {
+    return "RUNNING";
+  }
+  if (normalized === "idle") {
+    return "IDLE";
+  }
+  if (normalized === "disconnected") {
+    return "DISCONNECTED";
+  }
+
   return "UNKNOWN";
 }
 
-function toHistory(payload: Record<string, number>): DayHistory[] {
+function toFiniteNumber(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return null;
+  }
+
+  return Math.max(0, value);
+}
+
+function toPercent(value: unknown): number | null {
+  const numeric = toFiniteNumber(value);
+  if (numeric === null) {
+    return null;
+  }
+
+  if (numeric <= 1) {
+    return numeric * 100;
+  }
+
+  if (numeric <= 100) {
+    return numeric;
+  }
+
+  return null;
+}
+
+function toElapsedHours(
+  runtimeHours: number | null,
+  utilizationPct: number | null,
+): number | null {
+  if (runtimeHours === null || utilizationPct === null || utilizationPct <= 0) {
+    return null;
+  }
+
+  return runtimeHours / (utilizationPct / 100);
+}
+
+function toHistory(payload: Record<string, unknown>): DayHistory[] {
   const rows: DayHistory[] = [];
 
   for (const [key, value] of Object.entries(payload)) {
-    if (key === "thisweek" || key === "thismonth") {
+    if (key === "status" || key.endsWith("_utl")) {
       continue;
     }
 
@@ -247,21 +351,87 @@ function toHistory(payload: Record<string, number>): DayHistory[] {
       continue;
     }
 
+    const runtimeHours = toFiniteNumber(value);
+    const utilizationPct = toPercent(payload[`${key}_utl`]);
+
     rows.push({
       date: isoDate,
-      // TODO: Confirm unit for `frontend/totalworktime` payload from Protonest docs (hours vs minutes).
-      runtimeMin: Number.isFinite(value) ? Math.max(0, value * 60) : null,
-      // TODO: Elapsed time is not exposed by the current API list.
-      elapsedMin: null,
-      // TODO: Occupancy percentage requires elapsed/plan denominator API.
-      occupancyPct: null,
+      runtimeHours,
+      elapsedHours: toElapsedHours(runtimeHours, utilizationPct),
+      utilizationPct,
     });
   }
 
-  return rows.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  return rows.sort(
+    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
+  );
 }
 
-export async function fetchMachineStateDashboardData(machineId: string): Promise<DashboardData> {
+async function loadStateDetails(
+  machineId: string,
+  channel: string | null,
+): Promise<{ state: StateResponse; elapsed: StateResponse }> {
+  const config = getServerConfig();
+  const stateTopic = toStateDetailsTopic(channel, config.stateTopicFallback);
+
+  const [state, elapsed] = await Promise.all([
+    protonestRequest<StateResponse>(
+      "/api/v1/user/get-state-details/device/topic",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          deviceId: machineId,
+          topic: stateTopic,
+        }),
+      },
+      true,
+    ),
+    protonestRequest<StateResponse>(
+      "/api/v1/user/get-state-details/device/topic",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          deviceId: machineId,
+          topic: config.elapsedTimeTopic,
+        }),
+      },
+      true,
+    ),
+  ]);
+
+  return { state, elapsed };
+}
+
+export async function updateElapsedTimeHours(
+  machineId: string,
+  hours: number,
+): Promise<void> {
+  if (!Number.isFinite(hours)) {
+    throw new Error("Elapsed hours must be a finite number.");
+  }
+
+  const config = getServerConfig();
+
+  await protonestRequest(
+    "/api/v1/user/update-state-details",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        deviceId: machineId,
+        topic: config.elapsedTimeTopic,
+        payload: {
+          hours: String(Math.max(0, hours)),
+        },
+      }),
+    },
+    true,
+  );
+}
+
+export async function fetchMachineStateDashboardData(
+  machineId: string,
+  channel: string | null,
+): Promise<DashboardData> {
   log.info("dashboard_fetch_start", {
     machineId,
   });
@@ -276,26 +446,13 @@ export async function fetchMachineStateDashboardData(machineId: string): Promise
     throw new Error("Unknown machine id.");
   }
 
-  const body = {
-    deviceId: machine.id,
-    topic: config.totalWorktimeTopic,
-  };
-
-  const loadState = async () => {
-    return protonestRequest<StateResponse>(
-      "/api/v1/user/get-state-details/device/topic",
-      {
-        method: "POST",
-        body: JSON.stringify(body),
-      },
-      true,
-    );
-  };
-
-  let state: StateResponse;
+  let stateResponse: StateResponse;
+  let elapsedResponse: StateResponse;
 
   try {
-    state = await loadState();
+    const response = await loadStateDetails(machine.id, channel);
+    stateResponse = response.state;
+    elapsedResponse = response.elapsed;
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
     if (message.includes("401") || message.includes("403")) {
@@ -305,7 +462,9 @@ export async function fetchMachineStateDashboardData(machineId: string): Promise
       });
       tokenCache = null;
       await getServerSessionToken();
-      state = await loadState();
+      const response = await loadStateDetails(machine.id, channel);
+      stateResponse = response.state;
+      elapsedResponse = response.elapsed;
     } else {
       log.error("dashboard_fetch_failed", {
         machineId,
@@ -315,58 +474,71 @@ export async function fetchMachineStateDashboardData(machineId: string): Promise
     }
   }
 
-  const payload = state.data?.payload ?? {};
-  const thisWeek = payload.thisweek;
-  const thisMonth = payload.thismonth;
-  const timestamp = state.data?.timestamp ?? new Date().toISOString();
+  const payload = stateResponse.data?.payload ?? {};
+  const elapsedPayload = elapsedResponse.data?.payload as ElapsedPayload | undefined;
+  const elapsedHoursRaw = elapsedPayload?.hours;
+  const currentElapsedHours =
+    typeof elapsedHoursRaw === "number"
+      ? Math.max(0, elapsedHoursRaw)
+      : typeof elapsedHoursRaw === "string" && Number.isFinite(Number(elapsedHoursRaw))
+        ? Math.max(0, Number(elapsedHoursRaw))
+        : null;
+
+  const thisWeekRuntime = toFiniteNumber(payload.thisweek);
+  const thisMonthRuntime = toFiniteNumber(payload.thismonth);
+  const thisWeekUtilization = toPercent(payload.thisweek_utl);
+  const thisMonthUtilization = toPercent(payload.thismonth_utl);
+  const weekHighutil = toPercent(payload.weekHighutil);
+  const monthHighutil = toPercent(payload.monthHighutil);
+  const timestamp = stateResponse.data?.timestamp ?? new Date().toISOString();
   const history7d = toHistory(payload);
-  const todayRuntime = history7d.at(-1)?.runtimeMin ?? null;
+  const latestDay = history7d.at(-1);
+  const todayRuntime = latestDay?.runtimeHours ?? null;
+  const todayUtilization = latestDay?.utilizationPct ?? null;
 
   log.info("dashboard_fetch_success", {
     machineId,
     pointCount: history7d.length,
-    hasThisWeek: typeof thisWeek === "number",
-    hasThisMonth: typeof thisMonth === "number",
+    hasThisWeek: thisWeekRuntime !== null,
+    hasThisMonth: thisMonthRuntime !== null,
   });
 
   return {
     machine: {
       id: machine.id,
       name: machine.name,
-      state: toStatus(),
-      // TODO: Power watts are not available from the current API list; wire dedicated topic.
+      status: toStatus(payload.status),
       powerWatts: null,
       lastUpdated: timestamp,
     },
     periods: {
       today: {
-        runtimeMin: todayRuntime,
-        // TODO: Elapsed time is not exposed by the current API list.
-        elapsedMin: null,
-        // TODO: Occupancy percentage requires elapsed/plan denominator API.
-        occupancyPct: null,
-        // TODO: Best score metric source is not exposed in current API list.
+        runtimeHours: todayRuntime,
+        elapsedHours:
+          currentElapsedHours ?? toElapsedHours(todayRuntime, todayUtilization),
+        utilizationPct: todayUtilization,
         highestScorePct: null,
       },
       week: {
-        // TODO: Confirm unit for `thisweek` in Protonest payload.
-        runtimeMin: Number.isFinite(thisWeek) ? Math.max(0, thisWeek * 60) : null,
-        elapsedMin: null,
-        occupancyPct: null,
-        highestScorePct: null,
+        runtimeHours: thisWeekRuntime,
+        elapsedHours: toElapsedHours(thisWeekRuntime, thisWeekUtilization),
+        utilizationPct: thisWeekUtilization,
+        highestScorePct: weekHighutil,
       },
       month: {
-        // TODO: Confirm unit for `thismonth` in Protonest payload.
-        runtimeMin: Number.isFinite(thisMonth) ? Math.max(0, thisMonth * 60) : null,
-        elapsedMin: null,
-        occupancyPct: null,
-        highestScorePct: null,
+        runtimeHours: thisMonthRuntime,
+        elapsedHours: toElapsedHours(thisMonthRuntime, thisMonthUtilization),
+        utilizationPct: thisMonthUtilization,
+        highestScorePct: monthHighutil,
       },
     },
     history7d,
-    // TODO: Sheet URL source is not exposed by the current API list.
-    sheet: null,
-    // TODO: Weekly baseline source is not exposed by the current API list.
+    sheet: config.googleSheetUrl
+      ? {
+          mode: "link",
+          url: config.googleSheetUrl,
+        }
+      : null,
     baseline: null,
   };
 }

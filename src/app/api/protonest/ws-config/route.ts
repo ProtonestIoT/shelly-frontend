@@ -15,13 +15,16 @@ export async function GET() {
       wsUrlConfigured: Boolean(publicConfig.wsUrl),
       stateTopicPrefix: publicConfig.stateTopicPrefix,
       streamTopicPrefix: publicConfig.streamTopicPrefix,
+      stateTopicFallback: serverConfig.stateTopicFallback,
+      streamPowerTopic: serverConfig.streamPowerTopic,
     });
 
     return NextResponse.json(
       {
         config: {
           ...publicConfig,
-          totalWorktimeTopic: serverConfig.totalWorktimeTopic,
+          stateTopicFallback: serverConfig.stateTopicFallback,
+          streamPowerTopic: serverConfig.streamPowerTopic,
         },
       },
       {
