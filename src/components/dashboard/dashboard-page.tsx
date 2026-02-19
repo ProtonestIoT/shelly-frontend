@@ -3,6 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 
 import DashboardCard from "@/src/components/dashboard/dashboard-card";
+import {
+  notifyChannelChanged,
+  notifyDeviceChanged,
+  notifyElapsedUpdateFailed,
+  notifyElapsedUpdated,
+} from "@/src/components/dashboard/change-notifications";
 import ChannelSwitcher from "@/src/components/dashboard/channel-switcher";
 import Gauge from "@/src/components/dashboard/gauge";
 import KpiCard from "@/src/components/dashboard/kpi-card";
@@ -111,9 +117,9 @@ export default function DashboardPage() {
   async function handleElapsedSave() {
     const parsed = Number(elapsedInput);
     if (!Number.isFinite(parsed) || !isElapsedHoursInRange(parsed)) {
-      setElapsedSaveMessage(
-        `Elapsed time must be between ${ELAPSED_HOURS_MIN} and ${ELAPSED_HOURS_MAX} hours.`,
-      );
+      const message = `Elapsed time must be between ${ELAPSED_HOURS_MIN} and ${ELAPSED_HOURS_MAX} hours.`;
+      setElapsedSaveMessage(message);
+      notifyElapsedUpdateFailed(message);
       return;
     }
 
@@ -126,9 +132,39 @@ export default function DashboardPage() {
         }));
       }
       setElapsedSaveMessage("Elapsed time updated.");
+      notifyElapsedUpdated(parsed);
     } catch {
-      setElapsedSaveMessage("Failed to update elapsed time.");
+      const message = "Failed to update elapsed time.";
+      setElapsedSaveMessage(message);
+      notifyElapsedUpdateFailed(message);
     }
+  }
+
+  function handleMachineSelect(machineId: string) {
+    if (machineId === activeMachineId) {
+      return;
+    }
+
+    setSelectedMachineId(machineId);
+
+    const machine = machines.find((item) => item.id === machineId);
+    notifyDeviceChanged(machine?.name ?? machineId);
+  }
+
+  function handleChannelSelect(channel: string) {
+    if (!activeMachineId) {
+      return;
+    }
+
+    if (channel === activeChannel) {
+      return;
+    }
+
+    setSelectedChannelByMachine((current) => ({
+      ...current,
+      [activeMachineId]: channel,
+    }));
+    notifyChannelChanged(channel);
   }
 
   return (
@@ -140,7 +176,7 @@ export default function DashboardPage() {
               <MachineSwitcher
                 machines={machinesWithLiveStatus}
                 selected={activeMachineId}
-                onSelect={setSelectedMachineId}
+                onSelect={handleMachineSelect}
                 disabled={machineListLoading}
               />
 
@@ -152,14 +188,7 @@ export default function DashboardPage() {
                   channels={availableChannels}
                   selected={activeChannel}
                   disabled={machineListLoading || !activeMachineId || availableChannels.length === 0}
-                  onSelect={(channel) => {
-                    if (activeMachineId) {
-                      setSelectedChannelByMachine((current) => ({
-                        ...current,
-                        [activeMachineId]: channel,
-                      }));
-                    }
-                  }}
+                  onSelect={handleChannelSelect}
                 />
               </div>
 

@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono, Space_Grotesk } from "next/font/google";
+
+import AppToaster from "@/src/components/ui/app-toaster";
+
 import "./globals.css";
 
 const headingFont = Space_Grotesk({
@@ -33,6 +36,7 @@ export default function RootLayout({
         className={`${headingFont.variable} ${bodyFont.variable} ${monoFont.variable} concept-a antialiased`}
       >
         {children}
+        <AppToaster />
       </body>
     </html>
   );
