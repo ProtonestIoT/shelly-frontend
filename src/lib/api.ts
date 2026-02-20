@@ -160,14 +160,22 @@ function messageMatchesAnyTopic(body: string, expectedTopics: string[]): boolean
 function readPowerWatts(body: string): number | null {
   try {
     const payload = JSON.parse(body) as {
+      act_power?: unknown;
       payload?: {
         act_power?: unknown;
       };
     };
 
-    const actPower = payload.payload?.act_power;
+    const actPowerCandidate = payload.payload?.act_power ?? payload.act_power;
+    const actPower =
+      typeof actPowerCandidate === "number"
+        ? actPowerCandidate
+        : typeof actPowerCandidate === "string"
+          ? Number(actPowerCandidate)
+          : null;
+
     if (typeof actPower === "number" && Number.isFinite(actPower)) {
-      return Math.max(0, actPower);
+      return Math.abs(actPower);
     }
   } catch {
     return null;

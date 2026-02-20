@@ -22,6 +22,9 @@ interface StateResponse {
 
 interface ElapsedPayload {
   hours?: string | number;
+  payload?: {
+    hours?: string | number;
+  };
 }
 
 function toStateDetailsTopic(channel: string | null, fallbackTopic: string): string {
@@ -327,17 +330,6 @@ function toPercent(value: unknown): number | null {
   return null;
 }
 
-function toElapsedHours(
-  runtimeHours: number | null,
-  utilizationPct: number | null,
-): number | null {
-  if (runtimeHours === null || utilizationPct === null || utilizationPct <= 0) {
-    return null;
-  }
-
-  return runtimeHours / (utilizationPct / 100);
-}
-
 function toHistory(payload: Record<string, unknown>): DayHistory[] {
   const rows: DayHistory[] = [];
 
@@ -357,7 +349,7 @@ function toHistory(payload: Record<string, unknown>): DayHistory[] {
     rows.push({
       date: isoDate,
       runtimeHours,
-      elapsedHours: toElapsedHours(runtimeHours, utilizationPct),
+      elapsedHours: 0,
       utilizationPct,
     });
   }
@@ -374,30 +366,74 @@ async function loadStateDetails(
   const config = getServerConfig();
   const stateTopic = toStateDetailsTopic(channel, config.stateTopicFallback);
 
-  const [state, elapsed] = await Promise.all([
+  const loadElapsed = protonestRequest<StateResponse>(
+    "/api/v1/user/get-state-details/device/topic",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        deviceId: machineId,
+        topic: config.elapsedTimeTopic,
+      }),
+    },
+    true,
+  );
+
+  const loadStateForTopic = (topic: string) =>
     protonestRequest<StateResponse>(
       "/api/v1/user/get-state-details/device/topic",
       {
         method: "POST",
         body: JSON.stringify({
           deviceId: machineId,
-          topic: stateTopic,
+          topic,
         }),
       },
       true,
-    ),
-    protonestRequest<StateResponse>(
-      "/api/v1/user/get-state-details/device/topic",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          deviceId: machineId,
-          topic: config.elapsedTimeTopic,
-        }),
+    );
+
+  let state: StateResponse;
+
+  try {
+    state = await loadStateForTopic(stateTopic);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    const shouldFallbackToDefaultTopic =
+      Boolean(channel) &&
+      stateTopic !== config.stateTopicFallback &&
+      message.includes("No state data found for this topic");
+
+    if (!shouldFallbackToDefaultTopic) {
+      throw error;
+    }
+
+    log.warn("dashboard_state_topic_fallback", {
+      machineId,
+      requestedChannel: channel,
+      stateTopic,
+      fallbackTopic: config.stateTopicFallback,
+    });
+
+    state = await loadStateForTopic(config.stateTopicFallback);
+  }
+
+  let elapsed: StateResponse;
+
+  try {
+    elapsed = await loadElapsed;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown elapsed fetch error.";
+    log.warn("dashboard_elapsed_fetch_failed", {
+      machineId,
+      message,
+    });
+    elapsed = {
+      status: "Error",
+      data: {
+        payload: {},
+        timestamp: new Date().toISOString(),
       },
-      true,
-    ),
-  ]);
+    };
+  }
 
   return { state, elapsed };
 }
@@ -476,13 +512,13 @@ export async function fetchMachineStateDashboardData(
 
   const payload = stateResponse.data?.payload ?? {};
   const elapsedPayload = elapsedResponse.data?.payload as ElapsedPayload | undefined;
-  const elapsedHoursRaw = elapsedPayload?.hours;
+  const elapsedHoursRaw = elapsedPayload?.hours ?? elapsedPayload?.payload?.hours;
   const currentElapsedHours =
     typeof elapsedHoursRaw === "number"
       ? Math.max(0, elapsedHoursRaw)
       : typeof elapsedHoursRaw === "string" && Number.isFinite(Number(elapsedHoursRaw))
         ? Math.max(0, Number(elapsedHoursRaw))
-        : null;
+        : 0;
 
   const thisWeekRuntime = toFiniteNumber(payload.thisweek);
   const thisMonthRuntime = toFiniteNumber(payload.thismonth);
@@ -514,20 +550,19 @@ export async function fetchMachineStateDashboardData(
     periods: {
       today: {
         runtimeHours: todayRuntime,
-        elapsedHours:
-          currentElapsedHours ?? toElapsedHours(todayRuntime, todayUtilization),
+        elapsedHours: currentElapsedHours,
         utilizationPct: todayUtilization,
         highestScorePct: null,
       },
       week: {
         runtimeHours: thisWeekRuntime,
-        elapsedHours: toElapsedHours(thisWeekRuntime, thisWeekUtilization),
+        elapsedHours: 0,
         utilizationPct: thisWeekUtilization,
         highestScorePct: weekHighutil,
       },
       month: {
         runtimeHours: thisMonthRuntime,
-        elapsedHours: toElapsedHours(thisMonthRuntime, thisMonthUtilization),
+        elapsedHours: 0,
         utilizationPct: thisMonthUtilization,
         highestScorePct: monthHighutil,
       },

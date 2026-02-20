@@ -40,17 +40,6 @@ function toPercent(value: unknown): number | null {
   return null;
 }
 
-function toElapsedHours(
-  runtimeHours: number | null,
-  utilizationPct: number | null,
-): number | null {
-  if (runtimeHours === null || utilizationPct === null || utilizationPct <= 0) {
-    return null;
-  }
-
-  return runtimeHours / (utilizationPct / 100);
-}
-
 function toIsoFromDdMmYyyy(value: string): string | null {
   const [dayRaw, monthRaw, yearRaw] = value.split("-");
   const day = Number(dayRaw);
@@ -88,7 +77,7 @@ function toHistory(payload: Record<string, unknown>): DayHistory[] {
     rows.push({
       date: isoDate,
       runtimeHours,
-      elapsedHours: toElapsedHours(runtimeHours, utilizationPct),
+      elapsedHours: 0,
       utilizationPct,
     });
   }
@@ -157,26 +146,59 @@ function applyRealtimeStateSnapshot(
         ...current.periods.today,
         runtimeHours: todayRuntime,
         utilizationPct: todayUtilization,
-        elapsedHours:
-          current.periods.today.elapsedHours ??
-          toElapsedHours(todayRuntime, todayUtilization),
+        elapsedHours: current.periods.today.elapsedHours ?? 0,
       },
       week: {
         ...current.periods.week,
         runtimeHours: thisWeekRuntime,
         utilizationPct: thisWeekUtilization,
-        elapsedHours: toElapsedHours(thisWeekRuntime, thisWeekUtilization),
+        elapsedHours: current.periods.week.elapsedHours ?? 0,
         highestScorePct: weekHigh,
       },
       month: {
         ...current.periods.month,
         runtimeHours: thisMonthRuntime,
         utilizationPct: thisMonthUtilization,
-        elapsedHours: toElapsedHours(thisMonthRuntime, thisMonthUtilization),
+        elapsedHours: current.periods.month.elapsedHours ?? 0,
         highestScorePct: monthHigh,
       },
     },
     history7d,
+  };
+}
+
+function createRealtimeBootstrapData(machineId: string): DashboardData {
+  return {
+    machine: {
+      id: machineId,
+      name: machineId,
+      status: "UNKNOWN",
+      powerWatts: null,
+      lastUpdated: new Date().toISOString(),
+    },
+    periods: {
+      today: {
+        runtimeHours: null,
+        elapsedHours: null,
+        utilizationPct: null,
+        highestScorePct: null,
+      },
+      week: {
+        runtimeHours: null,
+        elapsedHours: null,
+        utilizationPct: null,
+        highestScorePct: null,
+      },
+      month: {
+        runtimeHours: null,
+        elapsedHours: null,
+        utilizationPct: null,
+        highestScorePct: null,
+      },
+    },
+    history7d: [],
+    sheet: null,
+    baseline: null,
   };
 }
 
@@ -248,6 +270,23 @@ export function useMachineData(
     [channelId, machineId],
   );
 
+  const invalidateMachineCache = useCallback((targetMachineId: string) => {
+    const keyPrefix = `${targetMachineId}::`;
+    const nextCache: Record<string, DashboardData> = {};
+
+    for (const [key, value] of Object.entries(cacheRef.current)) {
+      if (!key.startsWith(keyPrefix)) {
+        nextCache[key] = value;
+      }
+    }
+
+    cacheRef.current = nextCache;
+
+    loadedKeyRef.current = new Set(
+      [...loadedKeyRef.current].filter((key) => !key.startsWith(keyPrefix)),
+    );
+  }, []);
+
   const loadDashboardData = useCallback(
     async (silent = false, force = false) => {
       if (!machineId || !machineChannelKey) {
@@ -306,9 +345,6 @@ export function useMachineData(
           force,
           message,
         });
-        if (!silent) {
-          setData(null);
-        }
       } finally {
         setIsInitialLoading(false);
         setIsRefreshing(false);
@@ -329,7 +365,7 @@ export function useMachineData(
     if (cached) {
       setData(cached);
       setError(null);
-      setIsInitialLoading(false);
+      void loadDashboardData(true, true);
       return;
     }
 
@@ -358,17 +394,30 @@ export function useMachineData(
 
           if (targetKey === machineChannelKey) {
             setData(nextCached);
+            setError(null);
+          }
+        } else if (targetKey) {
+          const bootstrap = createRealtimeBootstrapData(machineId);
+          const nextCached = applyRealtimeStateSnapshot(bootstrap, nextState);
+          cacheRef.current[targetKey] = nextCached;
+          loadedKeyRef.current.add(targetKey);
+
+          if (targetKey === machineChannelKey) {
+            setData(nextCached);
+            setError(null);
           }
         } else if (machineChannelKey) {
           setData((current) => {
-            if (!current) {
-              return current;
-            }
-
-            const next = applyRealtimeStateSnapshot(current, nextState);
+            const base =
+              current ??
+              cacheRef.current[machineChannelKey] ??
+              createRealtimeBootstrapData(machineId);
+            const next = applyRealtimeStateSnapshot(base, nextState);
             cacheRef.current[machineChannelKey] = next;
+            loadedKeyRef.current.add(machineChannelKey);
             return next;
           });
+          setError(null);
         }
 
         log.debug("machine_realtime_message", {
@@ -380,25 +429,30 @@ export function useMachineData(
       },
       onPowerUpdate: (powerWatts) => {
         setData((current) => {
-          if (!current) {
+          if (!machineChannelKey) {
             return current;
           }
 
+          const base =
+            current ??
+            cacheRef.current[machineChannelKey] ??
+            createRealtimeBootstrapData(machineId);
+
           const next = {
-            ...current,
+            ...base,
             machine: {
-              ...current.machine,
+              ...base.machine,
               powerWatts,
               lastUpdated: new Date().toISOString(),
             },
           };
 
-          if (machineChannelKey) {
-            cacheRef.current[machineChannelKey] = next;
-          }
+          cacheRef.current[machineChannelKey] = next;
+          loadedKeyRef.current.add(machineChannelKey);
 
           return next;
         });
+        setError(null);
       },
       onError: (message) => {
         setError(message);
@@ -433,6 +487,7 @@ export function useMachineData(
 
       try {
         await updateElapsedTime(machineId, hours);
+        invalidateMachineCache(machineId);
         await loadDashboardData(true, true);
       } catch (caughtError) {
         const message =
@@ -450,7 +505,7 @@ export function useMachineData(
         setIsUpdatingElapsed(false);
       }
     },
-    [loadDashboardData, machineId],
+    [invalidateMachineCache, loadDashboardData, machineId],
   );
 
   return {
