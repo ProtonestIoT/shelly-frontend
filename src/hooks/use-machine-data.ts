@@ -7,6 +7,7 @@ import {
   fetchDashboardData,
   fetchMachineList,
   type RealtimeStateSnapshot,
+  updateConfigurations,
   updateElapsedTime,
 } from "@/src/lib/api";
 import { createLogger } from "@/src/lib/logging";
@@ -14,6 +15,25 @@ import type { DashboardData, DayHistory, MachineListItem } from "@/src/types/das
 
 const STALE_AFTER_MS = 5 * 60 * 1000;
 const log = createLogger("use-machine-data", "client");
+
+function toChannelSlot(channelId: string, stateChannelIds: string[]): 1 | 2 | null {
+  if (channelId.endsWith(":0")) {
+    return 1;
+  }
+  if (channelId.endsWith(":1")) {
+    return 2;
+  }
+
+  const index = stateChannelIds.indexOf(channelId);
+  if (index === 0) {
+    return 1;
+  }
+  if (index === 1) {
+    return 2;
+  }
+
+  return null;
+}
 
 function toFiniteNumber(value: unknown): number | null {
   if (typeof value !== "number" || !Number.isFinite(value)) {
@@ -40,15 +60,19 @@ function toPercent(value: unknown): number | null {
   return null;
 }
 
-function toElapsedHours(
-  runtimeHours: number | null,
-  utilizationPct: number | null,
-): number | null {
-  if (runtimeHours === null || utilizationPct === null || utilizationPct <= 0) {
-    return null;
+function toNonNegativeNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.max(0, value);
   }
 
-  return runtimeHours / (utilizationPct / 100);
+  if (typeof value === "string") {
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) {
+      return Math.max(0, numeric);
+    }
+  }
+
+  return null;
 }
 
 function toIsoFromDdMmYyyy(value: string): string | null {
@@ -73,7 +97,7 @@ function toHistory(payload: Record<string, unknown>): DayHistory[] {
   const rows: DayHistory[] = [];
 
   for (const [key, value] of Object.entries(payload)) {
-    if (key === "status" || key.endsWith("_utl")) {
+    if (key === "status" || key.endsWith("_utl") || key.endsWith("_elapsed")) {
       continue;
     }
 
@@ -84,11 +108,12 @@ function toHistory(payload: Record<string, unknown>): DayHistory[] {
 
     const runtimeHours = toFiniteNumber(value);
     const utilizationPct = toPercent(payload[`${key}_utl`]);
+    const elapsedHours = toNonNegativeNumber(payload[`${key}_elapsed`]) ?? 0;
 
     rows.push({
       date: isoDate,
       runtimeHours,
-      elapsedHours: toElapsedHours(runtimeHours, utilizationPct),
+      elapsedHours,
       utilizationPct,
     });
   }
@@ -125,6 +150,7 @@ function applyRealtimeStateSnapshot(
 
   const todayRuntime = latestDay?.runtimeHours ?? current.periods.today.runtimeHours;
   const todayUtilization = latestDay?.utilizationPct ?? current.periods.today.utilizationPct;
+  const todayElapsed = latestDay?.elapsedHours ?? current.periods.today.elapsedHours ?? 0;
 
   const thisWeekRuntime = payload
     ? toFiniteNumber(payload.thisweek) ?? current.periods.week.runtimeHours
@@ -144,6 +170,12 @@ function applyRealtimeStateSnapshot(
   const monthHigh = payload
     ? toPercent(payload.monthHighutil) ?? current.periods.month.highestScorePct
     : current.periods.month.highestScorePct;
+  const thisWeekElapsed = payload
+    ? toNonNegativeNumber(payload.thisweek_elapsed) ?? current.periods.week.elapsedHours ?? 0
+    : current.periods.week.elapsedHours ?? 0;
+  const thisMonthElapsed = payload
+    ? toNonNegativeNumber(payload.thismonth_elapsed) ?? current.periods.month.elapsedHours ?? 0
+    : current.periods.month.elapsedHours ?? 0;
 
   return {
     ...current,
@@ -157,22 +189,20 @@ function applyRealtimeStateSnapshot(
         ...current.periods.today,
         runtimeHours: todayRuntime,
         utilizationPct: todayUtilization,
-        elapsedHours:
-          current.periods.today.elapsedHours ??
-          toElapsedHours(todayRuntime, todayUtilization),
+        elapsedHours: todayElapsed,
       },
       week: {
         ...current.periods.week,
         runtimeHours: thisWeekRuntime,
         utilizationPct: thisWeekUtilization,
-        elapsedHours: toElapsedHours(thisWeekRuntime, thisWeekUtilization),
+        elapsedHours: thisWeekElapsed,
         highestScorePct: weekHigh,
       },
       month: {
         ...current.periods.month,
         runtimeHours: thisMonthRuntime,
         utilizationPct: thisMonthUtilization,
-        elapsedHours: toElapsedHours(thisMonthRuntime, thisMonthUtilization),
+        elapsedHours: thisMonthElapsed,
         highestScorePct: monthHigh,
       },
     },
@@ -180,55 +210,109 @@ function applyRealtimeStateSnapshot(
   };
 }
 
+function createRealtimeBootstrapData(machineId: string): DashboardData {
+  return {
+    machine: {
+      id: machineId,
+      name: machineId,
+      status: "UNKNOWN",
+      powerWatts: null,
+      lastUpdated: new Date().toISOString(),
+    },
+    configurations: {
+      channel1Hours: 0,
+      channel2Hours: 0,
+      channel1Threshold: 0,
+      channel2Threshold: 0,
+    },
+    periods: {
+      today: {
+        runtimeHours: null,
+        elapsedHours: 0,
+        utilizationPct: null,
+        highestScorePct: null,
+      },
+      week: {
+        runtimeHours: null,
+        elapsedHours: 0,
+        utilizationPct: null,
+        highestScorePct: null,
+      },
+      month: {
+        runtimeHours: null,
+        elapsedHours: 0,
+        utilizationPct: null,
+        highestScorePct: null,
+      },
+    },
+    history7d: [],
+    sheet: null,
+    baseline: null,
+  };
+}
+
 export function useMachineList() {
   const [machines, setMachines] = useState<MachineListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const loadMachines = useCallback(async (refresh = false) => {
+    log.debug("machine_list_load_start", { refresh });
+
+    if (refresh) {
+      setIsRefreshing(true);
+    } else {
+      setIsLoading(true);
+    }
+    setError(null);
+
+    try {
+      const data = await fetchMachineList();
+      setMachines(data);
+      log.info("machine_list_load_success", {
+        count: data.length,
+        refresh,
+      });
+    } catch (caughtError) {
+      const message =
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to load machine list.";
+      setError(message);
+      log.error("machine_list_load_failed", {
+        message,
+        refresh,
+      });
+    } finally {
+      if (refresh) {
+        setIsRefreshing(false);
+      } else {
+        setIsLoading(false);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     let mounted = true;
 
-    async function loadMachines() {
-      log.debug("machine_list_load_start");
-      setIsLoading(true);
-      setError(null);
-
-      try {
-        const data = await fetchMachineList();
-        if (!mounted) {
-          return;
-        }
-        setMachines(data);
-        log.info("machine_list_load_success", {
-          count: data.length,
-        });
-      } catch (caughtError) {
-        if (!mounted) {
-          return;
-        }
-        const message =
-          caughtError instanceof Error
-            ? caughtError.message
-            : "Unable to load machine list.";
-        setError(message);
-        log.error("machine_list_load_failed", {
-          message,
-        });
-      } finally {
-        if (mounted) {
-          setIsLoading(false);
-        }
+    void (async () => {
+      await loadMachines(false);
+      if (!mounted) {
+        return;
       }
-    }
-
-    loadMachines();
+    })();
 
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [loadMachines]);
 
-  return { machines, isLoading, error };
+  const refetch = useCallback(async () => {
+    await loadMachines(true);
+  }, [loadMachines]);
+
+  return { machines, isLoading, isRefreshing, error, refetch };
 }
 
 export function useMachineData(
@@ -240,6 +324,7 @@ export function useMachineData(
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isUpdatingElapsed, setIsUpdatingElapsed] = useState(false);
+  const [isUpdatingThreshold, setIsUpdatingThreshold] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const cacheRef = useRef<Record<string, DashboardData>>({});
   const loadedKeyRef = useRef<Set<string>>(new Set());
@@ -247,6 +332,23 @@ export function useMachineData(
     () => toMachineChannelKey(machineId, channelId),
     [channelId, machineId],
   );
+
+  const invalidateMachineCache = useCallback((targetMachineId: string) => {
+    const keyPrefix = `${targetMachineId}::`;
+    const nextCache: Record<string, DashboardData> = {};
+
+    for (const [key, value] of Object.entries(cacheRef.current)) {
+      if (!key.startsWith(keyPrefix)) {
+        nextCache[key] = value;
+      }
+    }
+
+    cacheRef.current = nextCache;
+
+    loadedKeyRef.current = new Set(
+      [...loadedKeyRef.current].filter((key) => !key.startsWith(keyPrefix)),
+    );
+  }, []);
 
   const loadDashboardData = useCallback(
     async (silent = false, force = false) => {
@@ -306,9 +408,6 @@ export function useMachineData(
           force,
           message,
         });
-        if (!silent) {
-          setData(null);
-        }
       } finally {
         setIsInitialLoading(false);
         setIsRefreshing(false);
@@ -329,7 +428,7 @@ export function useMachineData(
     if (cached) {
       setData(cached);
       setError(null);
-      setIsInitialLoading(false);
+      void loadDashboardData(true, true);
       return;
     }
 
@@ -358,17 +457,30 @@ export function useMachineData(
 
           if (targetKey === machineChannelKey) {
             setData(nextCached);
+            setError(null);
+          }
+        } else if (targetKey) {
+          const bootstrap = createRealtimeBootstrapData(machineId);
+          const nextCached = applyRealtimeStateSnapshot(bootstrap, nextState);
+          cacheRef.current[targetKey] = nextCached;
+          loadedKeyRef.current.add(targetKey);
+
+          if (targetKey === machineChannelKey) {
+            setData(nextCached);
+            setError(null);
           }
         } else if (machineChannelKey) {
           setData((current) => {
-            if (!current) {
-              return current;
-            }
-
-            const next = applyRealtimeStateSnapshot(current, nextState);
+            const base =
+              current ??
+              cacheRef.current[machineChannelKey] ??
+              createRealtimeBootstrapData(machineId);
+            const next = applyRealtimeStateSnapshot(base, nextState);
             cacheRef.current[machineChannelKey] = next;
+            loadedKeyRef.current.add(machineChannelKey);
             return next;
           });
+          setError(null);
         }
 
         log.debug("machine_realtime_message", {
@@ -380,25 +492,30 @@ export function useMachineData(
       },
       onPowerUpdate: (powerWatts) => {
         setData((current) => {
-          if (!current) {
+          if (!machineChannelKey) {
             return current;
           }
 
+          const base =
+            current ??
+            cacheRef.current[machineChannelKey] ??
+            createRealtimeBootstrapData(machineId);
+
           const next = {
-            ...current,
+            ...base,
             machine: {
-              ...current.machine,
+              ...base.machine,
               powerWatts,
               lastUpdated: new Date().toISOString(),
             },
           };
 
-          if (machineChannelKey) {
-            cacheRef.current[machineChannelKey] = next;
-          }
+          cacheRef.current[machineChannelKey] = next;
+          loadedKeyRef.current.add(machineChannelKey);
 
           return next;
         });
+        setError(null);
       },
       onError: (message) => {
         setError(message);
@@ -433,6 +550,7 @@ export function useMachineData(
 
       try {
         await updateElapsedTime(machineId, hours);
+        invalidateMachineCache(machineId);
         await loadDashboardData(true, true);
       } catch (caughtError) {
         const message =
@@ -450,7 +568,65 @@ export function useMachineData(
         setIsUpdatingElapsed(false);
       }
     },
-    [loadDashboardData, machineId],
+    [invalidateMachineCache, loadDashboardData, machineId],
+  );
+
+  const savePowerThreshold = useCallback(
+    async (targetChannelId: string, threshold: number) => {
+      if (!machineId) {
+        throw new Error("No machine selected.");
+      }
+
+      if (!Number.isFinite(threshold) || threshold < 0) {
+        throw new Error("Threshold must be a non-negative number.");
+      }
+
+      const slot = toChannelSlot(targetChannelId, stateChannelIds);
+      if (!slot) {
+        throw new Error(`Cannot map channel '${targetChannelId}' to configuration slot.`);
+      }
+
+      const current = data?.configurations ?? {
+        channel1Hours: 0,
+        channel2Hours: 0,
+        channel1Threshold: 0,
+        channel2Threshold: 0,
+      };
+
+      const payload = {
+        channel1Hours: current.channel1Hours,
+        channel2Hours: current.channel2Hours,
+        channel1Threshold:
+          slot === 1 ? threshold : current.channel1Threshold,
+        channel2Threshold:
+          slot === 2 ? threshold : current.channel2Threshold,
+      };
+
+      setIsUpdatingThreshold(true);
+      setError(null);
+
+      try {
+        await updateConfigurations(machineId, payload);
+        invalidateMachineCache(machineId);
+        await loadDashboardData(true, true);
+      } catch (caughtError) {
+        const message =
+          caughtError instanceof Error
+            ? caughtError.message
+            : "Unable to update power threshold.";
+        setError(message);
+        log.error("machine_threshold_update_failed", {
+          machineId,
+          targetChannelId,
+          threshold,
+          message,
+        });
+        throw caughtError;
+      } finally {
+        setIsUpdatingThreshold(false);
+      }
+    },
+    [data?.configurations, invalidateMachineCache, loadDashboardData, machineId, stateChannelIds],
   );
 
   return {
@@ -459,8 +635,10 @@ export function useMachineData(
     isInitialLoading,
     isRefreshing,
     isUpdatingElapsed,
+    isUpdatingThreshold,
     isStale,
     refetch: loadDashboardData,
     saveElapsedHours,
+    savePowerThreshold,
   };
 }

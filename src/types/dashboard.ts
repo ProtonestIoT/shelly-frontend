@@ -35,8 +35,16 @@ export interface DashboardMachine {
   lastUpdated: string;
 }
 
+export interface DeviceConfigurations {
+  channel1Hours: number;
+  channel2Hours: number;
+  channel1Threshold: number;
+  channel2Threshold: number;
+}
+
 export interface DashboardData {
   machine: DashboardMachine;
+  configurations: DeviceConfigurations;
   periods: DashboardPeriods;
   history7d: DayHistory[];
   sheet: {

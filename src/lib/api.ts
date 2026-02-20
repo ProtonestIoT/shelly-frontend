@@ -33,6 +33,17 @@ interface ElapsedUpdateResponse {
   ok: boolean;
 }
 
+interface ConfigurationsUpdateResponse {
+  ok: boolean;
+}
+
+export interface DeviceConfigurationsPayload {
+  channel1Hours: number;
+  channel2Hours: number;
+  channel1Threshold: number;
+  channel2Threshold: number;
+}
+
 export interface RealtimeStateSnapshot {
   status: MachineStatus | null;
   timestamp: string | null;
@@ -54,8 +65,6 @@ interface PublicRealtimeConfig {
   wsUrl: string | null;
   stateTopicPrefix: string | null;
   streamTopicPrefix: string | null;
-  stateTopicFallback: string | null;
-  streamPowerTopic: string | null;
 }
 
 interface WsConfigResponse {
@@ -154,20 +163,33 @@ function messageMatchesTopic(body: string, expectedTopic: string): boolean {
 }
 
 function messageMatchesAnyTopic(body: string, expectedTopics: string[]): boolean {
+  const topic = readMessageTopic(body);
+  if (!topic) {
+    return true;
+  }
+
   return expectedTopics.some((topic) => messageMatchesTopic(body, topic));
 }
 
 function readPowerWatts(body: string): number | null {
   try {
     const payload = JSON.parse(body) as {
+      act_power?: unknown;
       payload?: {
         act_power?: unknown;
       };
     };
 
-    const actPower = payload.payload?.act_power;
+    const actPowerCandidate = payload.payload?.act_power ?? payload.act_power;
+    const actPower =
+      typeof actPowerCandidate === "number"
+        ? actPowerCandidate
+        : typeof actPowerCandidate === "string"
+          ? Number(actPowerCandidate)
+          : null;
+
     if (typeof actPower === "number" && Number.isFinite(actPower)) {
-      return Math.max(0, actPower);
+      return Math.abs(actPower);
     }
   } catch {
     return null;
@@ -325,16 +347,10 @@ export function connectRealtimeMachineUpdates({
           const stateTopics = [
             ...new Set([
               ...stateChannelIds.map((stateChannel) => `frontend/${stateChannel}`.toLowerCase()),
-              ...buildExpectedTopics(
-                channelId ? `frontend/${channelId}` : null,
-                config.stateTopicFallback,
-              ),
+              ...buildExpectedTopics(channelId ? `frontend/${channelId}` : null, null),
             ]),
           ];
-          const streamTopics = buildExpectedTopics(
-            channelId ? `status/${channelId}` : null,
-            config.streamPowerTopic,
-          );
+          const streamTopics = buildExpectedTopics(channelId ? `status/${channelId}` : null, null);
 
           if (stateTopics.length === 0 || streamTopics.length === 0) {
             onError("Realtime websocket config is incomplete.");
@@ -492,5 +508,31 @@ export async function updateElapsedTime(machineId: string, hours: number): Promi
   log.info("elapsed_update_success", {
     machineId,
     hours,
+  });
+}
+
+export async function updateConfigurations(
+  machineId: string,
+  payload: DeviceConfigurationsPayload,
+): Promise<void> {
+  log.debug("configurations_update_start", {
+    machineId,
+    ...payload,
+  });
+
+  const response = await fetch(
+    `/api/protonest/configurations/${encodeURIComponent(machineId)}`,
+    {
+      method: "POST",
+      headers: jsonHeaders(),
+      cache: "no-store",
+      body: JSON.stringify(payload),
+    },
+  );
+
+  await parseJsonResponse<ConfigurationsUpdateResponse>(response);
+
+  log.info("configurations_update_success", {
+    machineId,
   });
 }

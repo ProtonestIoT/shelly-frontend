@@ -74,7 +74,7 @@ export default function ListboxSwitcher({
   }
 
   return (
-    <div ref={containerRef} className="relative">
+    <div ref={containerRef} className={cn("relative", open && "z-[220]")}>
       <button
         ref={triggerRef}
         type="button"
@@ -114,7 +114,7 @@ export default function ListboxSwitcher({
           role="listbox"
           aria-label={listAriaLabel}
           className={cn(
-            "animate-soft-pop absolute left-0 top-full z-50 mt-1 rounded-lg border border-overlay-border bg-overlay text-overlay-foreground shadow-lg",
+            "animate-soft-pop absolute left-0 top-full z-[230] mt-1 rounded-lg border border-overlay-border bg-overlay text-overlay-foreground shadow-lg",
             menuWidthClass,
           )}
         >
