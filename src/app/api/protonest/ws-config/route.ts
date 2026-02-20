@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { createLogger } from "@/src/lib/logging";
-import { getPublicConfig, getServerConfig } from "@/src/lib/protonest/config";
+import { getPublicConfig } from "@/src/lib/protonest/config";
 
 const log = createLogger("api-ws-config", "server");
 
@@ -9,22 +9,17 @@ export async function GET() {
   try {
     log.debug("request_start");
     const publicConfig = getPublicConfig();
-    const serverConfig = getServerConfig();
     log.info("request_success", {
       wsEnabled: publicConfig.wsEnabled,
       wsUrlConfigured: Boolean(publicConfig.wsUrl),
       stateTopicPrefix: publicConfig.stateTopicPrefix,
       streamTopicPrefix: publicConfig.streamTopicPrefix,
-      stateTopicFallback: serverConfig.stateTopicFallback,
-      streamPowerTopic: serverConfig.streamPowerTopic,
     });
 
     return NextResponse.json(
       {
         config: {
           ...publicConfig,
-          stateTopicFallback: serverConfig.stateTopicFallback,
-          streamPowerTopic: serverConfig.streamPowerTopic,
         },
       },
       {

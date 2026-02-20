@@ -40,10 +40,11 @@ interface ProjectStateResponse {
 }
 
 const CONFIGURATIONS_TOPIC = "configurations";
+const ELAPSED_TIME_TOPIC = "elapsedtime";
 
-function toStateDetailsTopic(channel: string | null, fallbackTopic: string): string {
+function toStateDetailsTopic(channel: string | null): string {
   if (!channel) {
-    return fallbackTopic;
+    throw new Error("No channel selected for dashboard state fetch.");
   }
 
   return `frontend/${channel}`;
@@ -337,22 +338,8 @@ function toChannelFromTopicKey(topic: string): string | null {
   return null;
 }
 
-function toMachineListFromCatalog(config: ReturnType<typeof getServerConfig>): MachineListItem[] {
-  return config.machineCatalog.map((machine) => ({
-    id: machine.id,
-    name: machine.name,
-    status: "UNKNOWN",
-    channels: machine.channels,
-  }));
-}
-
 export async function fetchProjectMachineList(): Promise<MachineListItem[]> {
   const config = getServerConfig();
-
-  if (!config.projectId) {
-    log.warn("machines_project_id_missing_fallback_catalog");
-    return toMachineListFromCatalog(config);
-  }
 
   try {
     const projectState = await protonestRequest<ProjectStateResponse>(
@@ -364,10 +351,6 @@ export async function fetchProjectMachineList(): Promise<MachineListItem[]> {
         }),
       },
       true,
-    );
-
-    const machineNameById = new Map(
-      config.machineCatalog.map((machine) => [machine.id, machine.name]),
     );
 
     const machines = Object.entries(projectState.data ?? {}).map(([deviceId, topics]) => {
@@ -393,7 +376,7 @@ export async function fetchProjectMachineList(): Promise<MachineListItem[]> {
       const channelList = [...channels].sort((a, b) => a.localeCompare(b));
       return {
         id: deviceId,
-        name: machineNameById.get(deviceId) ?? deviceId,
+        name: deviceId,
         status,
         channels: channelList,
       } satisfies MachineListItem;
@@ -404,16 +387,16 @@ export async function fetchProjectMachineList(): Promise<MachineListItem[]> {
       return machinesWithChannels;
     }
 
-    log.warn("machines_project_empty_fallback_catalog", {
+    log.warn("machines_project_empty", {
       projectId: config.projectId,
     });
-    return toMachineListFromCatalog(config);
+    return [];
   } catch (error) {
-    log.warn("machines_project_fetch_failed_fallback_catalog", {
+    log.warn("machines_project_fetch_failed", {
       projectId: config.projectId,
       message: error instanceof Error ? error.message : "Unknown project fetch error.",
     });
-    return toMachineListFromCatalog(config);
+    throw error;
   }
 }
 
@@ -495,10 +478,6 @@ function readConfigurationsFromEnvelope(payload: unknown): DeviceConfigurations 
   };
 }
 
-function shouldFallbackToDefaultStateTopic(message: string): boolean {
-  return message.includes("404") || message.includes("No state data found for this topic");
-}
-
 function toHistory(payload: Record<string, unknown>): DayHistory[] {
   const rows: DayHistory[] = [];
 
@@ -533,8 +512,7 @@ async function loadStateDetails(
   machineId: string,
   channel: string | null,
 ): Promise<{ state: StateResponse; elapsed: StateResponse; configurations: StateResponse }> {
-  const config = getServerConfig();
-  const stateTopic = toStateDetailsTopic(channel, config.stateTopicFallback);
+  const stateTopic = toStateDetailsTopic(channel);
 
   const loadElapsed = protonestRequest<StateResponse>(
     "/api/v1/user/get-state-details/device/topic",
@@ -542,7 +520,7 @@ async function loadStateDetails(
       method: "POST",
       body: JSON.stringify({
         deviceId: machineId,
-        topic: config.elapsedTimeTopic,
+        topic: ELAPSED_TIME_TOPIC,
       }),
     },
     true,
@@ -573,30 +551,7 @@ async function loadStateDetails(
       true,
     );
 
-  let state: StateResponse;
-
-  try {
-    state = await loadStateForTopic(stateTopic);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "";
-    const shouldFallbackToDefaultTopic =
-      Boolean(channel) &&
-      stateTopic !== config.stateTopicFallback &&
-      shouldFallbackToDefaultStateTopic(message);
-
-    if (!shouldFallbackToDefaultTopic) {
-      throw error;
-    }
-
-    log.warn("dashboard_state_topic_fallback", {
-      machineId,
-      requestedChannel: channel,
-      stateTopic,
-      fallbackTopic: config.stateTopicFallback,
-    });
-
-    state = await loadStateForTopic(config.stateTopicFallback);
-  }
+  const state = await loadStateForTopic(stateTopic);
 
   let elapsed: StateResponse;
   let configurations: StateResponse;
@@ -646,15 +601,13 @@ export async function updateElapsedTimeHours(
     throw new Error("Elapsed hours must be a finite number.");
   }
 
-  const config = getServerConfig();
-
   await protonestRequest(
     "/api/v1/user/update-state-details",
     {
       method: "POST",
       body: JSON.stringify({
         deviceId: machineId,
-        topic: config.elapsedTimeTopic,
+        topic: ELAPSED_TIME_TOPIC,
         payload: {
           hours: String(Math.max(0, hours)),
         },
@@ -696,8 +649,7 @@ export async function fetchMachineStateDashboardData(
   });
 
   const config = getServerConfig();
-  const machine = config.machineCatalog.find((entry) => entry.id === machineId);
-  const machineName = machine?.name ?? machineId;
+  const machineName = machineId;
 
   let stateResponse: StateResponse;
   let elapsedResponse: StateResponse;

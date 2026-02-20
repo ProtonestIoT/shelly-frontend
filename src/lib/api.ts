@@ -65,8 +65,6 @@ interface PublicRealtimeConfig {
   wsUrl: string | null;
   stateTopicPrefix: string | null;
   streamTopicPrefix: string | null;
-  stateTopicFallback: string | null;
-  streamPowerTopic: string | null;
 }
 
 interface WsConfigResponse {
@@ -349,16 +347,10 @@ export function connectRealtimeMachineUpdates({
           const stateTopics = [
             ...new Set([
               ...stateChannelIds.map((stateChannel) => `frontend/${stateChannel}`.toLowerCase()),
-              ...buildExpectedTopics(
-                channelId ? `frontend/${channelId}` : null,
-                config.stateTopicFallback,
-              ),
+              ...buildExpectedTopics(channelId ? `frontend/${channelId}` : null, null),
             ]),
           ];
-          const streamTopics = buildExpectedTopics(
-            channelId ? `status/${channelId}` : null,
-            config.streamPowerTopic,
-          );
+          const streamTopics = buildExpectedTopics(channelId ? `status/${channelId}` : null, null);
 
           if (stateTopics.length === 0 || streamTopics.length === 0) {
             onError("Realtime websocket config is incomplete.");

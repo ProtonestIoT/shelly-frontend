@@ -12,6 +12,8 @@ import {
   notifyThresholdUpdateFailed,
 } from "@/src/components/dashboard/change-notifications";
 import ChannelSwitcher from "@/src/components/dashboard/channel-switcher";
+import ControlButton from "@/src/components/dashboard/control-button";
+import ControlInputField from "@/src/components/dashboard/control-input-field";
 import Gauge from "@/src/components/dashboard/gauge";
 import KpiCard from "@/src/components/dashboard/kpi-card";
 import MachineSwitcher from "@/src/components/dashboard/machine-switcher";
@@ -41,13 +43,27 @@ function SkeletonCard({ className }: { className?: string }) {
 }
 
 export default function DashboardPage() {
-  const [selectedMachineId, setSelectedMachineId] = useState<string | null>(null);
-  const [selectedChannelByMachine, setSelectedChannelByMachine] = useState<Record<string, string>>({});
+  const [selectedMachineId, setSelectedMachineId] = useState<string | null>(
+    null,
+  );
+  const [selectedChannelByMachine, setSelectedChannelByMachine] = useState<
+    Record<string, string>
+  >({});
   const [now, setNow] = useState(() => new Date());
-  const [elapsedDraftByMachine, setElapsedDraftByMachine] = useState<Record<string, string>>({});
-  const [thresholdDraftByMachineChannel, setThresholdDraftByMachineChannel] = useState<Record<string, string>>({});
-  const [elapsedSaveMessage, setElapsedSaveMessage] = useState<string | null>(null);
-  const [thresholdSaveMessage, setThresholdSaveMessage] = useState<string | null>(null);
+  const [elapsedDraftByMachine, setElapsedDraftByMachine] = useState<
+    Record<string, string>
+  >({});
+  const [thresholdDraftByMachineChannel, setThresholdDraftByMachineChannel] =
+    useState<Record<string, string>>({});
+  const [activeMobileTab, setActiveMobileTab] = useState<
+    "overview" | "configurations"
+  >("overview");
+  const [elapsedSaveMessage, setElapsedSaveMessage] = useState<string | null>(
+    null,
+  );
+  const [thresholdSaveMessage, setThresholdSaveMessage] = useState<
+    string | null
+  >(null);
 
   const {
     machines,
@@ -58,10 +74,13 @@ export default function DashboardPage() {
   } = useMachineList();
 
   const activeMachineId =
-    selectedMachineId && machines.some((machine) => machine.id === selectedMachineId)
+    selectedMachineId &&
+    machines.some((machine) => machine.id === selectedMachineId)
       ? selectedMachineId
-      : machines[0]?.id ?? null;
-  const activeMachine = machines.find((machine) => machine.id === activeMachineId);
+      : (machines[0]?.id ?? null);
+  const activeMachine = machines.find(
+    (machine) => machine.id === activeMachineId,
+  );
   const availableChannels = activeMachine?.channels ?? [];
   const activeChannel = (() => {
     if (!activeMachineId) {
@@ -88,7 +107,10 @@ export default function DashboardPage() {
     savePowerThreshold,
   } = useMachineData(activeMachineId, activeChannel, availableChannels);
 
-  const activeMachineChannelKey = activeMachineId && activeChannel ? `${activeMachineId}::${activeChannel}` : null;
+  const activeMachineChannelKey =
+    activeMachineId && activeChannel
+      ? `${activeMachineId}::${activeChannel}`
+      : null;
 
   const machinesWithLiveStatus = useMemo(
     () =>
@@ -117,11 +139,26 @@ export default function DashboardPage() {
 
   const hasData = Boolean(data);
   const combinedError = machineListError ?? error;
-  const hasBlockingError = Boolean(combinedError && !hasData);
-  const hasNonBlockingError = Boolean(combinedError && hasData);
-  const isBusy = machineListLoading || machineListRefreshing || isInitialLoading || isRefreshing;
+  const isBackendFetching =
+    machineListLoading ||
+    machineListRefreshing ||
+    isInitialLoading ||
+    isRefreshing ||
+    isUpdatingElapsed ||
+    isUpdatingThreshold;
+  const showSidebarSkeleton = machineListLoading && !hasData;
+  const hasBlockingError = Boolean(
+    combinedError && !hasData && !isBackendFetching,
+  );
+  const hasNonBlockingError = Boolean(
+    combinedError && hasData && !isBackendFetching,
+  );
+  const isBusy = isBackendFetching;
   const hasConnectionAlert = Boolean(
-    data && (isStale || data.machine.status === "DISCONNECTED" || data.machine.status === "UNKNOWN"),
+    data &&
+    (isStale ||
+      data.machine.status === "DISCONNECTED" ||
+      data.machine.status === "UNKNOWN"),
   );
   const hasChartData = Boolean(data?.history7d?.length);
   const elapsedInput = (() => {
@@ -266,275 +303,442 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen text-foreground" aria-busy={isBusy}>
-      <div className="mx-auto w-full max-w-[1600px] px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
-        <DashboardCard className="relative z-40 mb-4 p-4 sm:mb-6 animate-fade-up-delay-1" compact>
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center">
-              <MachineSwitcher
-                machines={machinesWithLiveStatus}
-                selected={activeMachineId}
-                onSelect={handleMachineSelect}
-                disabled={machineListLoading}
-              />
-
-              <div className="inline-flex items-center gap-2">
-                <span className="text-xs font-semibold tracking-[0.18em] text-muted-foreground uppercase">
-                  Channel
-                </span>
-                <ChannelSwitcher
-                  channels={availableChannels}
-                  selected={activeChannel}
-                  disabled={machineListLoading || !activeMachineId || availableChannels.length === 0}
-                  onSelect={handleChannelSelect}
-                />
+      <div className="mx-auto w-full max-w-[1920px] px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
+        <DashboardCard className="mb-4 p-4 lg:hidden" compact>
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
+              <div>
+                <p className="text-xs font-semibold tracking-[0.18em] text-muted-foreground uppercase">
+                  Device
+                </p>
+                <div className="mt-2">
+                  <MachineSwitcher
+                    machines={machinesWithLiveStatus}
+                    selected={activeMachineId}
+                    onSelect={handleMachineSelect}
+                    disabled={machineListLoading}
+                  />
+                </div>
               </div>
 
-              <button
-                type="button"
-                onClick={() => {
-                  void refetchMachines();
-                }}
-                disabled={machineListLoading || machineListRefreshing}
-                className="h-9 rounded-md border border-primary/40 bg-primary/12 px-3 text-xs font-semibold uppercase tracking-wide text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {machineListRefreshing ? "Refreshing..." : "Refresh Devices"}
-              </button>
-
-              {hasData ? (
-                <div className="flex flex-wrap items-center gap-2">
-                  {isStale ? (
-                    <span className="rounded-full border border-status-disconnected/30 bg-status-disconnected/10 px-2 py-1 text-xs font-medium text-status-disconnected">
-                      Stale (&gt;5m)
-                    </span>
-                  ) : null}
+              <div>
+                <p className="text-xs font-semibold tracking-[0.18em] text-muted-foreground uppercase">
+                  Channel
+                </p>
+                <div className="mt-2">
+                  <ChannelSwitcher
+                    channels={availableChannels}
+                    selected={activeChannel}
+                    disabled={
+                      machineListLoading ||
+                      !activeMachineId ||
+                      availableChannels.length === 0
+                    }
+                    onSelect={handleChannelSelect}
+                  />
                 </div>
-              ) : null}
+              </div>
+
+              <div className="flex items-end">
+                <ControlButton
+                  fullWidth
+                  onClick={() => {
+                    void refetchMachines();
+                  }}
+                  disabled={machineListLoading || machineListRefreshing}
+                >
+                  {machineListRefreshing ? "Refreshing..." : "Refresh Devices"}
+                </ControlButton>
+              </div>
             </div>
 
-            <div className="text-left lg:text-right">
-              <p className="font-data text-lg text-foreground">
-                Local time: <time dateTime={now.toISOString()} suppressHydrationWarning>{formatTime(now)}</time>
-              </p>
-            </div>
+            <p className="font-data text-sm text-foreground">
+              Local time:{" "}
+              <time dateTime={now.toISOString()} suppressHydrationWarning>
+                {formatTime(now)}
+              </time>
+            </p>
+
+            {hasData && isStale ? (
+              <span className="inline-flex rounded-full border border-status-disconnected/30 bg-status-disconnected/10 px-2 py-1 text-xs font-medium text-status-disconnected">
+                Stale (&gt;5m)
+              </span>
+            ) : null}
           </div>
         </DashboardCard>
 
-        {hasConnectionAlert ? (
-          <DashboardCard
-            className="mb-4 border-status-disconnected/40 bg-status-disconnected/8 p-3 animate-fade-up-delay-1"
-            role="alert"
+        <div className="mb-4 grid grid-cols-2 gap-2 lg:hidden">
+          <button
+            type="button"
+            onClick={() => {
+              setActiveMobileTab("overview");
+            }}
+            className={`h-10 rounded-md border px-3 text-sm font-semibold ${
+              activeMobileTab === "overview"
+                ? "border-primary/40 bg-primary/12 text-foreground"
+                : "border-border bg-card text-muted-foreground"
+            }`}
           >
-              <p className="text-sm font-semibold text-status-disconnected uppercase tracking-wide">
-               {data?.machine.status === "DISCONNECTED"
-                  ? "Machine Telemetry Disconnected"
-                  : data?.machine.status === "UNKNOWN"
-                    ? "Machine Telemetry Partial"
-                    : "Telemetry Stale"}
-             </p>
-             <p className="text-sm text-foreground">
-                 {data?.machine.status === "DISCONNECTED"
-                   ? "No live feed detected from machine power source. Verify sensor link and gateway connectivity."
-                   : data?.machine.status === "UNKNOWN"
-                     ? "Realtime runtime and power are available, but machine status mapping is not configured yet."
-                   : "Live feed is older than 5 minutes. Validate network path or data source health."}
-              </p>
-          </DashboardCard>
-        ) : null}
-
-        {hasBlockingError ? (
-          <DashboardCard
-            className="flex min-h-[420px] items-center justify-center p-6 text-center animate-fade-up-delay-2"
-            role="alert"
+            Data Overview
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setActiveMobileTab("configurations");
+            }}
+            className={`h-10 rounded-md border px-3 text-sm font-semibold ${
+              activeMobileTab === "configurations"
+                ? "border-primary/40 bg-primary/12 text-foreground"
+                : "border-border bg-card text-muted-foreground"
+            }`}
           >
-            <div className="max-w-lg">
-              <h2 className="text-xl tracking-wide uppercase">No Data</h2>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Unable to load dashboard data. {combinedError}
-              </p>
-            </div>
-          </DashboardCard>
-        ) : null}
+            Configurations
+          </button>
+        </div>
 
-        {hasNonBlockingError ? (
-          <DashboardCard
-            className="mb-4 border-status-disconnected/40 bg-status-disconnected/8 p-3 animate-fade-up-delay-1"
-            role="status"
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[320px_minmax(0,1fr)] lg:gap-6">
+          <aside
+            className={`${
+              activeMobileTab === "configurations" ? "block" : "hidden"
+            } space-y-4 lg:sticky lg:top-4 lg:block lg:self-start`}
           >
-            <p className="text-xs font-semibold text-status-disconnected uppercase tracking-wide">
-              Data refresh warning
-            </p>
-            <p className="text-sm text-foreground">{combinedError}</p>
-          </DashboardCard>
-        ) : null}
-
-        {!hasBlockingError && isInitialLoading && !hasData ? (
-          <div className="space-y-4 sm:space-y-6" role="status" aria-live="polite" aria-label="Loading dashboard data">
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
-              <SkeletonCard className="lg:min-h-[250px] animate-fade-up-delay-1" />
-              <SkeletonCard className="animate-fade-up-delay-1" />
-              <SkeletonCard className="animate-fade-up-delay-2" />
-              <SkeletonCard className="animate-fade-up-delay-3" />
-            </div>
-            <DashboardCard className="animate-fade-up-delay-2">
-              <div className="animate-pulse space-y-4">
-                <div className="h-3 w-36 rounded bg-muted" />
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                  <div className="h-40 rounded bg-muted" />
-                  <div className="h-40 rounded bg-muted" />
-                  <div className="h-40 rounded bg-muted" />
-                </div>
-              </div>
-            </DashboardCard>
-            <DashboardCard className="animate-fade-up-delay-3">
-              <div className="animate-pulse space-y-3">
-                <div className="h-3 w-44 rounded bg-muted" />
-                <div className="h-72 rounded bg-muted" />
-              </div>
-            </DashboardCard>
-          </div>
-        ) : null}
-
-        {!hasBlockingError && data ? (
-          <main className="relative z-0 space-y-4 sm:space-y-6">
-            <section className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-              <div className="h-full animate-fade-up animate-fade-up-delay-1">
-                <StatusBlock status={data.machine.status} powerWatts={data.machine.powerWatts} />
-              </div>
-              {data.periods?.today ? (
-                <div className="h-full animate-fade-up animate-fade-up-delay-1">
-                  <KpiCard
-                    title="Today"
-                    data={data.periods.today}
-                  />
-                </div>
-              ) : null}
-              {data.periods?.week ? (
-                <div className="h-full animate-fade-up animate-fade-up-delay-2">
-                  <KpiCard
-                    title="This Week"
-                    data={data.periods.week}
-                    weeklyBaselineHours={data.baseline?.weeklyHours ?? undefined}
-                  />
-                </div>
-              ) : null}
-              {data.periods?.month ? (
-                <div className="h-full animate-fade-up animate-fade-up-delay-3">
-                  <KpiCard
-                    title="This Month"
-                    data={data.periods.month}
-                  />
-                </div>
-              ) : null}
-            </section>
-
-            <DashboardCard className="animate-fade-up-delay-2 p-4">
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                <label className="flex flex-1 flex-col gap-1">
-                  <span className="text-xs font-semibold tracking-[0.18em] text-muted-foreground uppercase">
-                    Elapsed Hours
-                  </span>
-                  <input
-                    type="number"
-                    min={ELAPSED_HOURS_MIN}
-                    max={ELAPSED_HOURS_MAX}
-                    step={ELAPSED_HOURS_STEP}
-                    value={elapsedInput}
-                    onChange={(event) => {
-                      if (activeMachineId) {
-                        setElapsedDraftByMachine((current) => ({
-                          ...current,
-                          [activeMachineId]: event.target.value,
-                        }));
-                      }
-                      if (elapsedSaveMessage) {
-                        setElapsedSaveMessage(null);
-                      }
-                    }}
-                    className="h-10 rounded-md border border-border bg-card px-3 text-sm text-foreground outline-none ring-offset-0 placeholder:text-muted-foreground focus:border-primary"
-                    placeholder={`Enter ${ELAPSED_HOURS_MIN}-${ELAPSED_HOURS_MAX} hours`}
-                  />
-                </label>
-                <button
-                  type="button"
-                  onClick={() => {
-                    void handleElapsedSave();
-                  }}
-                  disabled={isUpdatingElapsed || !activeMachineId}
-                  className="h-10 rounded-md border border-primary/40 bg-primary/12 px-4 text-sm font-semibold text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+            {showSidebarSkeleton ? (
+              <>
+                <DashboardCard
+                  className="hidden animate-fade-up-delay-1 p-4 lg:block"
+                  compact
                 >
-                  {isUpdatingElapsed ? "Saving..." : "Update Elapsed"}
-                </button>
-                <label className="flex flex-1 flex-col gap-1">
-                  <span className="text-xs font-semibold tracking-[0.18em] text-muted-foreground uppercase">
-                    Power Threshold ({activeChannel ?? "N/A"})
-                  </span>
-                  <input
-                    type="number"
-                    min={0}
-                    step={0.1}
-                    value={thresholdInput}
-                    onChange={(event) => {
-                      if (activeMachineChannelKey) {
-                        setThresholdDraftByMachineChannel((current) => ({
-                          ...current,
-                          [activeMachineChannelKey]: event.target.value,
-                        }));
-                      }
-                      if (thresholdSaveMessage) {
-                        setThresholdSaveMessage(null);
-                      }
-                    }}
-                    className="h-10 rounded-md border border-border bg-card px-3 text-sm text-foreground outline-none ring-offset-0 placeholder:text-muted-foreground focus:border-primary"
-                    placeholder="Enter threshold"
-                    disabled={!activeChannelSlot}
-                  />
-                </label>
-                <button
-                  type="button"
-                  onClick={() => {
-                    void handleThresholdSave();
-                  }}
-                  disabled={isUpdatingThreshold || !activeMachineId || !activeChannel || !activeChannelSlot}
-                  className="h-10 rounded-md border border-primary/40 bg-primary/12 px-4 text-sm font-semibold text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                  <div className="animate-pulse space-y-3">
+                    <div className="h-3 w-24 rounded bg-muted" />
+                    <div className="h-10 rounded bg-muted" />
+                    <div className="h-3 w-24 rounded bg-muted" />
+                    <div className="h-10 rounded bg-muted" />
+                    <div className="h-10 rounded bg-muted" />
+                  </div>
+                </DashboardCard>
+                <DashboardCard className="animate-fade-up-delay-2 p-4">
+                  <div className="animate-pulse space-y-3">
+                    <div className="h-3 w-28 rounded bg-muted" />
+                    <div className="h-10 rounded bg-muted" />
+                    <div className="h-10 rounded bg-muted" />
+                    <div className="h-3 w-36 rounded bg-muted" />
+                    <div className="h-10 rounded bg-muted" />
+                    <div className="h-10 rounded bg-muted" />
+                  </div>
+                </DashboardCard>
+              </>
+            ) : (
+              <>
+                <DashboardCard
+                  className="hidden animate-fade-up-delay-1 p-4 lg:block"
+                  compact
                 >
-                  {isUpdatingThreshold ? "Saving..." : "Update Threshold"}
-                </button>
-              </div>
-              {elapsedSaveMessage ? (
-                <p className="mt-2 text-xs text-muted-foreground" aria-live="polite">
-                  {elapsedSaveMessage}
-                </p>
-              ) : null}
-              {thresholdSaveMessage ? (
-                <p className="mt-2 text-xs text-muted-foreground" aria-live="polite">
-                  {thresholdSaveMessage}
-                </p>
-              ) : null}
-            </DashboardCard>
+                  <div className="space-y-4">
+                    <div>
+                      <p className="text-xs font-semibold tracking-[0.18em] text-muted-foreground uppercase">
+                        Device
+                      </p>
+                      <div className="mt-2">
+                        <MachineSwitcher
+                          machines={machinesWithLiveStatus}
+                          selected={activeMachineId}
+                          onSelect={handleMachineSelect}
+                          disabled={machineListLoading}
+                        />
+                      </div>
+                    </div>
 
-            {data.periods ? (
-              <DashboardCard className="animate-fade-up-delay-2">
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                  <Gauge label="Today" value={data.periods.today.utilizationPct} />
-                  <Gauge label="Week" value={data.periods.week.utilizationPct} />
-                  <Gauge label="Month" value={data.periods.month.utilizationPct} />
+                    <div>
+                      <p className="text-xs font-semibold tracking-[0.18em] text-muted-foreground uppercase">
+                        Channel
+                      </p>
+                      <div className="mt-2">
+                        <ChannelSwitcher
+                          channels={availableChannels}
+                          selected={activeChannel}
+                          disabled={
+                            machineListLoading ||
+                            !activeMachineId ||
+                            availableChannels.length === 0
+                          }
+                          onSelect={handleChannelSelect}
+                        />
+                      </div>
+                    </div>
+
+                    <ControlButton
+                      fullWidth
+                      onClick={() => {
+                        void refetchMachines();
+                      }}
+                      disabled={machineListLoading || machineListRefreshing}
+                    >
+                      {machineListRefreshing
+                        ? "Refreshing..."
+                        : "Refresh Devices"}
+                    </ControlButton>
+
+                    <p className="font-data text-sm text-foreground">
+                      Local time:{" "}
+                      <time
+                        dateTime={now.toISOString()}
+                        suppressHydrationWarning
+                      >
+                        {formatTime(now)}
+                      </time>
+                    </p>
+
+                    {hasData && isStale ? (
+                      <span className="inline-flex rounded-full border border-status-disconnected/30 bg-status-disconnected/10 px-2 py-1 text-xs font-medium text-status-disconnected">
+                        Stale (&gt;5m)
+                      </span>
+                    ) : null}
+                  </div>
+                </DashboardCard>
+
+                <DashboardCard className="animate-fade-up-delay-2 p-4">
+                  <div className="space-y-3">
+                    <ControlInputField
+                      label="Elapsed Hours"
+                      type="number"
+                      min={ELAPSED_HOURS_MIN}
+                      max={ELAPSED_HOURS_MAX}
+                      step={ELAPSED_HOURS_STEP}
+                      value={elapsedInput}
+                      onChange={(nextValue) => {
+                        if (activeMachineId) {
+                          setElapsedDraftByMachine((current) => ({
+                            ...current,
+                            [activeMachineId]: nextValue,
+                          }));
+                        }
+                        if (elapsedSaveMessage) {
+                          setElapsedSaveMessage(null);
+                        }
+                      }}
+                      placeholder={`Enter ${ELAPSED_HOURS_MIN}-${ELAPSED_HOURS_MAX} hours`}
+                    />
+
+                    <ControlButton
+                      fullWidth
+                      onClick={() => {
+                        void handleElapsedSave();
+                      }}
+                      disabled={isUpdatingElapsed || !activeMachineId}
+                    >
+                      {isUpdatingElapsed ? "Saving..." : "Update Elapsed"}
+                    </ControlButton>
+
+                    <ControlInputField
+                      label={`Power Threshold (${activeChannel ?? "N/A"})`}
+                      type="number"
+                      min={0}
+                      step={0.1}
+                      value={thresholdInput}
+                      onChange={(nextValue) => {
+                        if (activeMachineChannelKey) {
+                          setThresholdDraftByMachineChannel((current) => ({
+                            ...current,
+                            [activeMachineChannelKey]: nextValue,
+                          }));
+                        }
+                        if (thresholdSaveMessage) {
+                          setThresholdSaveMessage(null);
+                        }
+                      }}
+                      placeholder="Enter threshold"
+                      disabled={!activeChannelSlot}
+                    />
+
+                    <ControlButton
+                      fullWidth
+                      onClick={() => {
+                        void handleThresholdSave();
+                      }}
+                      disabled={
+                        isUpdatingThreshold ||
+                        !activeMachineId ||
+                        !activeChannel ||
+                        !activeChannelSlot
+                      }
+                    >
+                      {isUpdatingThreshold ? "Saving..." : "Update Threshold"}
+                    </ControlButton>
+
+                    {elapsedSaveMessage ? (
+                      <p
+                        className="text-xs text-muted-foreground"
+                        aria-live="polite"
+                      >
+                        {elapsedSaveMessage}
+                      </p>
+                    ) : null}
+
+                    {thresholdSaveMessage ? (
+                      <p
+                        className="text-xs text-muted-foreground"
+                        aria-live="polite"
+                      >
+                        {thresholdSaveMessage}
+                      </p>
+                    ) : null}
+                  </div>
+                </DashboardCard>
+
+                {hasNonBlockingError ? (
+                  <DashboardCard
+                    className="border-status-disconnected/40 bg-status-disconnected/8 p-3 animate-fade-up-delay-1"
+                    role="status"
+                  >
+                    <p className="text-xs font-semibold text-status-disconnected uppercase tracking-wide">
+                      Data refresh warning
+                    </p>
+                    <p className="text-sm text-foreground">{combinedError}</p>
+                  </DashboardCard>
+                ) : null}
+              </>
+            )}
+          </aside>
+
+          <section
+            className={`${
+              activeMobileTab === "overview" ? "block" : "hidden"
+            } space-y-4 sm:space-y-6 lg:block`}
+          >
+            {isBackendFetching ? (
+              <div
+                className="space-y-4 sm:space-y-6"
+                role="status"
+                aria-live="polite"
+                aria-label="Loading dashboard data"
+              >
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
+                  <SkeletonCard className="lg:min-h-[250px] animate-fade-up-delay-1" />
+                  <SkeletonCard className="animate-fade-up-delay-1" />
+                  <SkeletonCard className="animate-fade-up-delay-2" />
+                  <SkeletonCard className="animate-fade-up-delay-3" />
+                </div>
+                <DashboardCard className="animate-fade-up-delay-2">
+                  <div className="animate-pulse space-y-4">
+                    <div className="h-3 w-36 rounded bg-muted" />
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                      <div className="h-40 rounded bg-muted" />
+                      <div className="h-40 rounded bg-muted" />
+                      <div className="h-40 rounded bg-muted" />
+                    </div>
+                  </div>
+                </DashboardCard>
+                <DashboardCard className="animate-fade-up-delay-3">
+                  <div className="animate-pulse space-y-3">
+                    <div className="h-3 w-44 rounded bg-muted" />
+                    <div className="h-72 rounded bg-muted" />
+                  </div>
+                </DashboardCard>
+              </div>
+            ) : null}
+
+            {!isBackendFetching && hasConnectionAlert ? (
+              <DashboardCard
+                className="border-status-disconnected/40 bg-status-disconnected/8 p-3 animate-fade-up-delay-1"
+                role="alert"
+              >
+                <p className="text-sm font-semibold text-status-disconnected uppercase tracking-wide">
+                  {data?.machine.status === "DISCONNECTED"
+                    ? "Machine Telemetry Disconnected"
+                    : data?.machine.status === "UNKNOWN"
+                      ? "Machine Telemetry Partial"
+                      : "Telemetry Stale"}
+                </p>
+                <p className="text-sm text-foreground">
+                  {data?.machine.status === "DISCONNECTED"
+                    ? "No live feed detected from machine power source. Verify sensor link and gateway connectivity."
+                    : data?.machine.status === "UNKNOWN"
+                      ? "Realtime runtime and power are available, but machine status mapping is not configured yet."
+                      : "Live feed is older than 5 minutes. Validate network path or data source health."}
+                </p>
+              </DashboardCard>
+            ) : null}
+
+            {!isBackendFetching && hasBlockingError ? (
+              <DashboardCard
+                className="flex min-h-[420px] items-center justify-center p-6 text-center animate-fade-up-delay-2"
+                role="alert"
+              >
+                <div className="max-w-lg">
+                  <h2 className="text-xl tracking-wide uppercase">No Data</h2>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Unable to load dashboard data. {combinedError}
+                  </p>
                 </div>
               </DashboardCard>
             ) : null}
 
-            {hasChartData ? (
-              <div className="animate-fade-up animate-fade-up-delay-2">
-                <UtilizationChart data={data.history7d} />
-              </div>
-            ) : null}
+            {!isBackendFetching && !hasBlockingError && data ? (
+              <main className="relative z-0 space-y-4 sm:space-y-6">
+                <section className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+                  <div className="h-full animate-fade-up animate-fade-up-delay-1">
+                    <StatusBlock
+                      status={data.machine.status}
+                      powerWatts={data.machine.powerWatts}
+                    />
+                  </div>
+                  {data.periods?.today ? (
+                    <div className="h-full animate-fade-up animate-fade-up-delay-1">
+                      <KpiCard title="Today" data={data.periods.today} />
+                    </div>
+                  ) : null}
+                  {data.periods?.week ? (
+                    <div className="h-full animate-fade-up animate-fade-up-delay-2">
+                      <KpiCard
+                        title="This Week"
+                        data={data.periods.week}
+                        weeklyBaselineHours={
+                          data.baseline?.weeklyHours ?? undefined
+                        }
+                      />
+                    </div>
+                  ) : null}
+                  {data.periods?.month ? (
+                    <div className="h-full animate-fade-up animate-fade-up-delay-3">
+                      <KpiCard title="This Month" data={data.periods.month} />
+                    </div>
+                  ) : null}
+                </section>
 
-            {data.sheet ? (
-              <div className="animate-fade-up animate-fade-up-delay-3">
-                <SheetPanel url={data.sheet.url} />
-              </div>
+                {data.periods ? (
+                  <DashboardCard className="animate-fade-up-delay-2">
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                      <Gauge
+                        label="Today"
+                        value={data.periods.today.utilizationPct}
+                      />
+                      <Gauge
+                        label="Week"
+                        value={data.periods.week.utilizationPct}
+                      />
+                      <Gauge
+                        label="Month"
+                        value={data.periods.month.utilizationPct}
+                      />
+                    </div>
+                  </DashboardCard>
+                ) : null}
+
+                {hasChartData ? (
+                  <div className="animate-fade-up animate-fade-up-delay-2">
+                    <UtilizationChart data={data.history7d} />
+                  </div>
+                ) : null}
+
+                {data.sheet ? (
+                  <div className="animate-fade-up animate-fade-up-delay-3">
+                    <SheetPanel url={data.sheet.url} />
+                  </div>
+                ) : null}
+              </main>
             ) : null}
-          </main>
-        ) : null}
+          </section>
+        </div>
       </div>
     </div>
   );
