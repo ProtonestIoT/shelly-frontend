@@ -8,6 +8,8 @@ import {
   notifyDeviceChanged,
   notifyElapsedUpdateFailed,
   notifyElapsedUpdated,
+  notifyThresholdUpdated,
+  notifyThresholdUpdateFailed,
 } from "@/src/components/dashboard/change-notifications";
 import ChannelSwitcher from "@/src/components/dashboard/channel-switcher";
 import Gauge from "@/src/components/dashboard/gauge";
@@ -43,11 +45,22 @@ export default function DashboardPage() {
   const [selectedChannelByMachine, setSelectedChannelByMachine] = useState<Record<string, string>>({});
   const [now, setNow] = useState(() => new Date());
   const [elapsedDraftByMachine, setElapsedDraftByMachine] = useState<Record<string, string>>({});
+  const [thresholdDraftByMachineChannel, setThresholdDraftByMachineChannel] = useState<Record<string, string>>({});
   const [elapsedSaveMessage, setElapsedSaveMessage] = useState<string | null>(null);
+  const [thresholdSaveMessage, setThresholdSaveMessage] = useState<string | null>(null);
 
-  const { machines, isLoading: machineListLoading, error: machineListError } = useMachineList();
+  const {
+    machines,
+    isLoading: machineListLoading,
+    isRefreshing: machineListRefreshing,
+    error: machineListError,
+    refetch: refetchMachines,
+  } = useMachineList();
 
-  const activeMachineId = selectedMachineId ?? machines[0]?.id ?? null;
+  const activeMachineId =
+    selectedMachineId && machines.some((machine) => machine.id === selectedMachineId)
+      ? selectedMachineId
+      : machines[0]?.id ?? null;
   const activeMachine = machines.find((machine) => machine.id === activeMachineId);
   const availableChannels = activeMachine?.channels ?? [];
   const activeChannel = (() => {
@@ -63,8 +76,19 @@ export default function DashboardPage() {
     return availableChannels[0] ?? null;
   })();
 
-  const { data, error, isInitialLoading, isRefreshing, isStale, isUpdatingElapsed, saveElapsedHours } =
-    useMachineData(activeMachineId, activeChannel, availableChannels);
+  const {
+    data,
+    error,
+    isInitialLoading,
+    isRefreshing,
+    isStale,
+    isUpdatingElapsed,
+    isUpdatingThreshold,
+    saveElapsedHours,
+    savePowerThreshold,
+  } = useMachineData(activeMachineId, activeChannel, availableChannels);
+
+  const activeMachineChannelKey = activeMachineId && activeChannel ? `${activeMachineId}::${activeChannel}` : null;
 
   const machinesWithLiveStatus = useMemo(
     () =>
@@ -92,8 +116,10 @@ export default function DashboardPage() {
   }, []);
 
   const hasData = Boolean(data);
-  const hasError = Boolean(machineListError || error);
-  const isBusy = machineListLoading || isInitialLoading || isRefreshing;
+  const combinedError = machineListError ?? error;
+  const hasBlockingError = Boolean(combinedError && !hasData);
+  const hasNonBlockingError = Boolean(combinedError && hasData);
+  const isBusy = machineListLoading || machineListRefreshing || isInitialLoading || isRefreshing;
   const hasConnectionAlert = Boolean(
     data && (isStale || data.machine.status === "DISCONNECTED" || data.machine.status === "UNKNOWN"),
   );
@@ -112,6 +138,47 @@ export default function DashboardPage() {
     return typeof serverElapsed === "number" && Number.isFinite(serverElapsed)
       ? serverElapsed.toFixed(2)
       : "";
+  })();
+
+  const activeChannelSlot = (() => {
+    if (!activeChannel) {
+      return null;
+    }
+    if (activeChannel.endsWith(":0")) {
+      return 1;
+    }
+    if (activeChannel.endsWith(":1")) {
+      return 2;
+    }
+    const index = availableChannels.indexOf(activeChannel);
+    if (index === 0) {
+      return 1;
+    }
+    if (index === 1) {
+      return 2;
+    }
+    return null;
+  })();
+
+  const thresholdInput = (() => {
+    if (!activeMachineChannelKey) {
+      return "";
+    }
+
+    const draft = thresholdDraftByMachineChannel[activeMachineChannelKey];
+    if (draft !== undefined) {
+      return draft;
+    }
+
+    if (!data?.configurations || !activeChannelSlot) {
+      return "";
+    }
+
+    const threshold =
+      activeChannelSlot === 1
+        ? data.configurations.channel1Threshold
+        : data.configurations.channel2Threshold;
+    return Number.isFinite(threshold) ? threshold.toFixed(2) : "";
   })();
 
   async function handleElapsedSave() {
@@ -137,6 +204,36 @@ export default function DashboardPage() {
       const message = "Failed to update elapsed time.";
       setElapsedSaveMessage(message);
       notifyElapsedUpdateFailed(message);
+    }
+  }
+
+  async function handleThresholdSave() {
+    if (!activeMachineId || !activeChannel) {
+      return;
+    }
+
+    const parsed = Number(thresholdInput);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      const message = "Power threshold must be a non-negative number.";
+      setThresholdSaveMessage(message);
+      notifyThresholdUpdateFailed(message);
+      return;
+    }
+
+    try {
+      await savePowerThreshold(activeChannel, parsed);
+      if (activeMachineChannelKey) {
+        setThresholdDraftByMachineChannel((current) => ({
+          ...current,
+          [activeMachineChannelKey]: parsed.toFixed(2),
+        }));
+      }
+      setThresholdSaveMessage("Power threshold updated.");
+      notifyThresholdUpdated(parsed);
+    } catch {
+      const message = "Failed to update power threshold.";
+      setThresholdSaveMessage(message);
+      notifyThresholdUpdateFailed(message);
     }
   }
 
@@ -192,6 +289,17 @@ export default function DashboardPage() {
                 />
               </div>
 
+              <button
+                type="button"
+                onClick={() => {
+                  void refetchMachines();
+                }}
+                disabled={machineListLoading || machineListRefreshing}
+                className="h-9 rounded-md border border-primary/40 bg-primary/12 px-3 text-xs font-semibold uppercase tracking-wide text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {machineListRefreshing ? "Refreshing..." : "Refresh Devices"}
+              </button>
+
               {hasData ? (
                 <div className="flex flex-wrap items-center gap-2">
                   {isStale ? (
@@ -233,7 +341,7 @@ export default function DashboardPage() {
           </DashboardCard>
         ) : null}
 
-        {hasError ? (
+        {hasBlockingError ? (
           <DashboardCard
             className="flex min-h-[420px] items-center justify-center p-6 text-center animate-fade-up-delay-2"
             role="alert"
@@ -241,13 +349,25 @@ export default function DashboardPage() {
             <div className="max-w-lg">
               <h2 className="text-xl tracking-wide uppercase">No Data</h2>
               <p className="mt-2 text-sm text-muted-foreground">
-                Unable to load dashboard data. {machineListError ?? error}
+                Unable to load dashboard data. {combinedError}
               </p>
             </div>
           </DashboardCard>
         ) : null}
 
-        {!hasError && isInitialLoading && !hasData ? (
+        {hasNonBlockingError ? (
+          <DashboardCard
+            className="mb-4 border-status-disconnected/40 bg-status-disconnected/8 p-3 animate-fade-up-delay-1"
+            role="status"
+          >
+            <p className="text-xs font-semibold text-status-disconnected uppercase tracking-wide">
+              Data refresh warning
+            </p>
+            <p className="text-sm text-foreground">{combinedError}</p>
+          </DashboardCard>
+        ) : null}
+
+        {!hasBlockingError && isInitialLoading && !hasData ? (
           <div className="space-y-4 sm:space-y-6" role="status" aria-live="polite" aria-label="Loading dashboard data">
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
               <SkeletonCard className="lg:min-h-[250px] animate-fade-up-delay-1" />
@@ -274,7 +394,7 @@ export default function DashboardPage() {
           </div>
         ) : null}
 
-        {!hasError && data ? (
+        {!hasBlockingError && data ? (
           <main className="relative z-0 space-y-4 sm:space-y-6">
             <section className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
               <div className="h-full animate-fade-up animate-fade-up-delay-1">
@@ -308,7 +428,7 @@ export default function DashboardPage() {
             </section>
 
             <DashboardCard className="animate-fade-up-delay-2 p-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <label className="flex flex-1 flex-col gap-1">
                   <span className="text-xs font-semibold tracking-[0.18em] text-muted-foreground uppercase">
                     Elapsed Hours
@@ -344,10 +464,50 @@ export default function DashboardPage() {
                 >
                   {isUpdatingElapsed ? "Saving..." : "Update Elapsed"}
                 </button>
+                <label className="flex flex-1 flex-col gap-1">
+                  <span className="text-xs font-semibold tracking-[0.18em] text-muted-foreground uppercase">
+                    Power Threshold ({activeChannel ?? "N/A"})
+                  </span>
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.1}
+                    value={thresholdInput}
+                    onChange={(event) => {
+                      if (activeMachineChannelKey) {
+                        setThresholdDraftByMachineChannel((current) => ({
+                          ...current,
+                          [activeMachineChannelKey]: event.target.value,
+                        }));
+                      }
+                      if (thresholdSaveMessage) {
+                        setThresholdSaveMessage(null);
+                      }
+                    }}
+                    className="h-10 rounded-md border border-border bg-card px-3 text-sm text-foreground outline-none ring-offset-0 placeholder:text-muted-foreground focus:border-primary"
+                    placeholder="Enter threshold"
+                    disabled={!activeChannelSlot}
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void handleThresholdSave();
+                  }}
+                  disabled={isUpdatingThreshold || !activeMachineId || !activeChannel || !activeChannelSlot}
+                  className="h-10 rounded-md border border-primary/40 bg-primary/12 px-4 text-sm font-semibold text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isUpdatingThreshold ? "Saving..." : "Update Threshold"}
+                </button>
               </div>
               {elapsedSaveMessage ? (
                 <p className="mt-2 text-xs text-muted-foreground" aria-live="polite">
                   {elapsedSaveMessage}
+                </p>
+              ) : null}
+              {thresholdSaveMessage ? (
+                <p className="mt-2 text-xs text-muted-foreground" aria-live="polite">
+                  {thresholdSaveMessage}
                 </p>
               ) : null}
             </DashboardCard>

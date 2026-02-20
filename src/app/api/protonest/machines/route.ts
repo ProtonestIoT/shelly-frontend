@@ -1,23 +1,18 @@
 import { NextResponse } from "next/server";
 
 import { createLogger } from "@/src/lib/logging";
-import { getServerConfig } from "@/src/lib/protonest/config";
+import { fetchProjectMachineList } from "@/src/lib/protonest/client";
 
 const log = createLogger("api-machines", "server");
 
 export async function GET() {
   try {
     log.debug("request_start");
-    const config = getServerConfig();
+    const machines = await fetchProjectMachineList();
 
     return NextResponse.json(
       {
-        machines: config.machineCatalog.map((machine) => ({
-          id: machine.id,
-          name: machine.name,
-          status: "UNKNOWN",
-          channels: machine.channels,
-        })),
+        machines,
       },
       {
         status: 200,

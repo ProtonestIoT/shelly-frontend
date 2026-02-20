@@ -15,3 +15,11 @@ export function notifyElapsedUpdated(elapsedHours: number) {
 export function notifyElapsedUpdateFailed(message = "Failed to update elapsed time.") {
   toast.error(message);
 }
+
+export function notifyThresholdUpdated(threshold: number) {
+  toast.success(`Power threshold updated to ${threshold.toFixed(2)}.`);
+}
+
+export function notifyThresholdUpdateFailed(message = "Failed to update power threshold.") {
+  toast.error(message);
+}

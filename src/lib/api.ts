@@ -33,6 +33,17 @@ interface ElapsedUpdateResponse {
   ok: boolean;
 }
 
+interface ConfigurationsUpdateResponse {
+  ok: boolean;
+}
+
+export interface DeviceConfigurationsPayload {
+  channel1Hours: number;
+  channel2Hours: number;
+  channel1Threshold: number;
+  channel2Threshold: number;
+}
+
 export interface RealtimeStateSnapshot {
   status: MachineStatus | null;
   timestamp: string | null;
@@ -154,6 +165,11 @@ function messageMatchesTopic(body: string, expectedTopic: string): boolean {
 }
 
 function messageMatchesAnyTopic(body: string, expectedTopics: string[]): boolean {
+  const topic = readMessageTopic(body);
+  if (!topic) {
+    return true;
+  }
+
   return expectedTopics.some((topic) => messageMatchesTopic(body, topic));
 }
 
@@ -500,5 +516,31 @@ export async function updateElapsedTime(machineId: string, hours: number): Promi
   log.info("elapsed_update_success", {
     machineId,
     hours,
+  });
+}
+
+export async function updateConfigurations(
+  machineId: string,
+  payload: DeviceConfigurationsPayload,
+): Promise<void> {
+  log.debug("configurations_update_start", {
+    machineId,
+    ...payload,
+  });
+
+  const response = await fetch(
+    `/api/protonest/configurations/${encodeURIComponent(machineId)}`,
+    {
+      method: "POST",
+      headers: jsonHeaders(),
+      cache: "no-store",
+      body: JSON.stringify(payload),
+    },
+  );
+
+  await parseJsonResponse<ConfigurationsUpdateResponse>(response);
+
+  log.info("configurations_update_success", {
+    machineId,
   });
 }

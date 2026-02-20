@@ -18,6 +18,7 @@ export interface ProtonestServerConfig {
   apiBaseUrl: string;
   authEmail: string;
   authPassword: string;
+  projectId: string | null;
   stateTopicFallback: string;
   elapsedTimeTopic: string;
   streamPowerTopic: string;
@@ -29,6 +30,7 @@ export function getServerConfig(): ProtonestServerConfig {
   const apiBaseUrl = process.env.PROTONEST_API_BASE_URL?.trim();
   const authEmail = process.env.PROTONEST_AUTH_EMAIL?.trim();
   const authPassword = process.env.PROTONEST_AUTH_PASSWORD?.trim();
+  const projectId = process.env.PROTONEST_PROJECT_ID?.trim() || null;
   const stateTopicFallback = process.env.PROTONEST_STATE_TOPIC_FALLBACK?.trim();
   const elapsedTimeTopic = process.env.PROTONEST_ELAPSEDTIME_TOPIC?.trim();
   const streamPowerTopic = process.env.PROTONEST_STREAM_POWER_TOPIC?.trim();
@@ -124,6 +126,7 @@ export function getServerConfig(): ProtonestServerConfig {
     apiBaseUrl,
     authEmail,
     authPassword,
+    projectId,
     stateTopicFallback,
     elapsedTimeTopic,
     streamPowerTopic,
