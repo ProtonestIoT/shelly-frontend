@@ -1,6 +1,6 @@
 "use client";
 
-import { TOOLTIP_COPY } from "@/src/lib/dashboard-copy";
+import { DASHBOARD_COPY } from "@/src/lib/dashboard-copy";
 import { formatHours, formatPercent } from "@/src/lib/format";
 import type { PeriodMetrics } from "@/src/types/dashboard";
 
@@ -23,7 +23,7 @@ function MetricRow({ label, tooltip, value }: { label: string; tooltip: string; 
           <button
             type="button"
             className="h-4 w-4 rounded-full border border-border text-[10px] leading-none text-muted-foreground"
-            aria-label={`${label} details`}
+            aria-label={DASHBOARD_COPY.metricDetailsAria(label)}
           >
             i
           </button>
@@ -35,6 +35,19 @@ function MetricRow({ label, tooltip, value }: { label: string; tooltip: string; 
 }
 
 export default function KpiCard({ title, data, weeklyBaselineHours }: KpiCardProps) {
+  const runtimeTooltip =
+    title === "Today"
+      ? DASHBOARD_COPY.kpiRuntimeTodayTooltip
+      : title === "This Week"
+        ? DASHBOARD_COPY.kpiRuntimeWeekTooltip
+        : DASHBOARD_COPY.kpiRuntimeMonthTooltip;
+  const elapsedTooltip =
+    title === "Today"
+      ? DASHBOARD_COPY.kpiElapsedTodayTooltip
+      : title === "This Week"
+        ? DASHBOARD_COPY.kpiElapsedWeekTooltip
+        : DASHBOARD_COPY.kpiElapsedMonthTooltip;
+
   return (
     <DashboardCard className="h-full lg:min-h-[250px]">
       <SectionHeading className="mb-3">{title}</SectionHeading>
@@ -49,18 +62,18 @@ export default function KpiCard({ title, data, weeklyBaselineHours }: KpiCardPro
       <div>
         <MetricRow
           label="Runtime"
-          tooltip={TOOLTIP_COPY.kpiRuntime}
+          tooltip={runtimeTooltip}
           value={formatHours(data.runtimeHours)}
         />
         <MetricRow
           label="Elapsed"
-          tooltip={TOOLTIP_COPY.kpiElapsed}
+          tooltip={elapsedTooltip}
           value={formatHours(data.elapsedHours)}
         />
         {title !== "Today" ? (
           <MetricRow
             label="Best Utilization"
-            tooltip={TOOLTIP_COPY.kpiBest}
+            tooltip={DASHBOARD_COPY.kpiBestTooltip}
             value={formatPercent(data.highestScorePct)}
           />
         ) : null}
@@ -68,11 +81,11 @@ export default function KpiCard({ title, data, weeklyBaselineHours }: KpiCardPro
 
       {title === "This Week" && typeof weeklyBaselineHours === "number" ? (
         <div className="mt-3 rounded-md border border-border bg-secondary px-3 py-2 text-sm text-secondary-foreground">
-          <InfoTooltip label={TOOLTIP_COPY.kpiWeeklyBaseline}>
+          <InfoTooltip label={DASHBOARD_COPY.kpiWeeklyBaselineTooltip}>
             <button
               type="button"
               className="inline-flex w-full items-center justify-between text-left"
-              aria-label="Weekly baseline details"
+              aria-label={DASHBOARD_COPY.weeklyBaselineAria}
             >
               <span>Weekly baseline: {weeklyBaselineHours.toFixed(1)}h</span>
               <span className="text-xs text-muted-foreground">ℹ</span>

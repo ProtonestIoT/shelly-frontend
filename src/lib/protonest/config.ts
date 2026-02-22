@@ -2,7 +2,7 @@ export interface ProtonestServerConfig {
   apiBaseUrl: string;
   authEmail: string;
   authPassword: string;
-  projectId: string;
+  projectName: string;
   googleSheetUrl: string | null;
 }
 
@@ -10,7 +10,7 @@ export function getServerConfig(): ProtonestServerConfig {
   const apiBaseUrl = process.env.PROTONEST_API_BASE_URL?.trim();
   const authEmail = process.env.PROTONEST_AUTH_EMAIL?.trim();
   const authPassword = process.env.PROTONEST_AUTH_PASSWORD?.trim();
-  const projectId = process.env.PROTONEST_PROJECT_ID?.trim();
+  const projectName = process.env.PROTONEST_PROJECT_NAME?.trim();
   const googleSheetUrl = process.env.PROTONEST_GOOGLE_SHEET_URL?.trim() || null;
 
   if (!apiBaseUrl) {
@@ -23,15 +23,15 @@ export function getServerConfig(): ProtonestServerConfig {
     );
   }
 
-  if (!projectId) {
-    throw new Error("PROTONEST_PROJECT_ID is not configured.");
+  if (!projectName) {
+    throw new Error("PROTONEST_PROJECT_NAME is not configured.");
   }
 
   return {
     apiBaseUrl,
     authEmail,
     authPassword,
-    projectId,
+    projectName,
     googleSheetUrl,
   };
 }
@@ -42,6 +42,10 @@ export interface ProtonestPublicConfig {
   stateTopicPrefix: string | null;
   streamTopicPrefix: string | null;
 }
+
+const DEFAULT_WS_HOST = "api.protonestconnect.co";
+const DEFAULT_STATE_TOPIC_PREFIX = "/topic/state";
+const DEFAULT_STREAM_TOPIC_PREFIX = "/topic/stream";
 
 function readBoolean(value: string | undefined, fallback: boolean): boolean {
   if (value === undefined) {
@@ -59,11 +63,39 @@ function readBoolean(value: string | undefined, fallback: boolean): boolean {
   return fallback;
 }
 
+function ensureLeadingSlash(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+}
+
+function normalizeWsUrl(value: string | undefined): string {
+  const raw = value?.trim() || DEFAULT_WS_HOST;
+
+  if (raw.startsWith("ws://") || raw.startsWith("wss://")) {
+    return raw;
+  }
+
+  const withoutHttp = raw.replace(/^https?:\/\//i, "");
+  if (withoutHttp.includes("/")) {
+    return `wss://${withoutHttp}`;
+  }
+
+  return `wss://${withoutHttp}/ws`;
+}
+
 export function getPublicConfig(): ProtonestPublicConfig {
   const wsEnabled = readBoolean(process.env.NEXT_PUBLIC_PROTONEST_WS_ENABLED, true);
-  const wsUrl = process.env.NEXT_PUBLIC_PROTONEST_WS_URL?.trim();
-  const stateTopicPrefix = process.env.NEXT_PUBLIC_PROTONEST_STATE_TOPIC_PREFIX?.trim();
-  const streamTopicPrefix = process.env.NEXT_PUBLIC_PROTONEST_STREAM_TOPIC_PREFIX?.trim();
+  const wsUrl = normalizeWsUrl(process.env.NEXT_PUBLIC_PROTONEST_WS_URL);
+  const stateTopicPrefix = ensureLeadingSlash(
+    process.env.NEXT_PUBLIC_PROTONEST_STATE_TOPIC_PREFIX ?? DEFAULT_STATE_TOPIC_PREFIX,
+  );
+  const streamTopicPrefix = ensureLeadingSlash(
+    process.env.NEXT_PUBLIC_PROTONEST_STREAM_TOPIC_PREFIX ?? DEFAULT_STREAM_TOPIC_PREFIX,
+  );
 
   if (!wsEnabled) {
     return {
@@ -72,22 +104,6 @@ export function getPublicConfig(): ProtonestPublicConfig {
       stateTopicPrefix: null,
       streamTopicPrefix: null,
     };
-  }
-
-  if (!wsUrl) {
-    throw new Error("NEXT_PUBLIC_PROTONEST_WS_URL is not configured.");
-  }
-
-  if (!stateTopicPrefix) {
-    throw new Error(
-      "NEXT_PUBLIC_PROTONEST_STATE_TOPIC_PREFIX is not configured.",
-    );
-  }
-
-  if (!streamTopicPrefix) {
-    throw new Error(
-      "NEXT_PUBLIC_PROTONEST_STREAM_TOPIC_PREFIX is not configured.",
-    );
   }
 
   return {

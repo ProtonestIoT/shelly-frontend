@@ -14,21 +14,6 @@ interface TokenResponse {
   refreshToken: string;
 }
 
-interface StateResponse {
-  status: string;
-  data: {
-    payload: Record<string, unknown>;
-    timestamp?: string;
-  };
-}
-
-interface ElapsedPayload {
-  hours?: string | number;
-  payload?: {
-    hours?: string | number;
-  };
-}
-
 interface ProjectTopicSnapshot {
   payload?: Record<string, unknown>;
   timestamp?: string;
@@ -37,6 +22,10 @@ interface ProjectTopicSnapshot {
 interface ProjectStateResponse {
   status: string;
   data: Record<string, Record<string, ProjectTopicSnapshot>>;
+}
+
+interface ProjectStateRequestBody {
+  projectName: string;
 }
 
 const CONFIGURATIONS_TOPIC = "configurations";
@@ -48,6 +37,14 @@ function toStateDetailsTopic(channel: string | null): string {
   }
 
   return `frontend/${channel}`;
+}
+
+function toProjectStateRequestPayload(config: {
+  projectName: string;
+}): ProjectStateRequestBody {
+  return {
+    projectName: config.projectName,
+  };
 }
 
 interface TokenCache {
@@ -342,16 +339,7 @@ export async function fetchProjectMachineList(): Promise<MachineListItem[]> {
   const config = getServerConfig();
 
   try {
-    const projectState = await protonestRequest<ProjectStateResponse>(
-      "/api/v1/user/get-state-details/project",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          projectId: config.projectId,
-        }),
-      },
-      true,
-    );
+    const projectState = await fetchProjectState();
 
     const machines = Object.entries(projectState.data ?? {}).map(([deviceId, topics]) => {
       const channels = new Set<string>();
@@ -388,12 +376,12 @@ export async function fetchProjectMachineList(): Promise<MachineListItem[]> {
     }
 
     log.warn("machines_project_empty", {
-      projectId: config.projectId,
+      projectName: config.projectName,
     });
     return [];
   } catch (error) {
     log.warn("machines_project_fetch_failed", {
-      projectId: config.projectId,
+      projectName: config.projectName,
       message: error instanceof Error ? error.message : "Unknown project fetch error.",
     });
     throw error;
@@ -440,15 +428,6 @@ function toNonNegativeNumber(value: unknown): number | null {
   return null;
 }
 
-function readElapsedHoursFromEnvelope(payload: unknown): number {
-  if (!payload || typeof payload !== "object") {
-    return 0;
-  }
-
-  const candidate = payload as ElapsedPayload;
-  return toNonNegativeNumber(candidate.hours ?? candidate.payload?.hours) ?? 0;
-}
-
 function readConfigurationsFromEnvelope(payload: unknown): DeviceConfigurations {
   const empty: DeviceConfigurations = {
     channel1Hours: 0,
@@ -482,7 +461,11 @@ function toHistory(payload: Record<string, unknown>): DayHistory[] {
   const rows: DayHistory[] = [];
 
   for (const [key, value] of Object.entries(payload)) {
-    if (key === "status" || key.endsWith("_utl") || key.endsWith("_elapsed")) {
+    if (
+      key === "status" ||
+      key.endsWith("_utl") ||
+      key.endsWith("_elapsedhr")
+    ) {
       continue;
     }
 
@@ -493,7 +476,7 @@ function toHistory(payload: Record<string, unknown>): DayHistory[] {
 
     const runtimeHours = toFiniteNumber(value);
     const utilizationPct = toPercent(payload[`${key}_utl`]);
-    const elapsedHours = toNonNegativeNumber(payload[`${key}_elapsed`]) ?? 0;
+    const elapsedHours = toNonNegativeNumber(payload[`${key}_elapsedhr`]) ?? 0;
 
     rows.push({
       date: isoDate,
@@ -508,89 +491,31 @@ function toHistory(payload: Record<string, unknown>): DayHistory[] {
   );
 }
 
-async function loadStateDetails(
-  machineId: string,
-  channel: string | null,
-): Promise<{ state: StateResponse; elapsed: StateResponse; configurations: StateResponse }> {
-  const stateTopic = toStateDetailsTopic(channel);
+async function fetchProjectState(): Promise<ProjectStateResponse> {
+  const config = getServerConfig();
 
-  const loadElapsed = protonestRequest<StateResponse>(
-    "/api/v1/user/get-state-details/device/topic",
+  return protonestRequest<ProjectStateResponse>(
+    "/api/v1/user/get-state-details/project",
     {
       method: "POST",
-      body: JSON.stringify({
-        deviceId: machineId,
-        topic: ELAPSED_TIME_TOPIC,
-      }),
+      body: JSON.stringify(toProjectStateRequestPayload(config)),
     },
     true,
   );
+}
 
-  const loadConfigurations = protonestRequest<StateResponse>(
-    "/api/v1/user/get-state-details/device/topic",
-    {
-      method: "POST",
-      body: JSON.stringify({
-        deviceId: machineId,
-        topic: CONFIGURATIONS_TOPIC,
-      }),
-    },
-    true,
-  );
-
-  const loadStateForTopic = (topic: string) =>
-    protonestRequest<StateResponse>(
-      "/api/v1/user/get-state-details/device/topic",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          deviceId: machineId,
-          topic,
-        }),
-      },
-      true,
-    );
-
-  const state = await loadStateForTopic(stateTopic);
-
-  let elapsed: StateResponse;
-  let configurations: StateResponse;
-
-  try {
-    elapsed = await loadElapsed;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown elapsed fetch error.";
-    log.warn("dashboard_elapsed_fetch_failed", {
-      machineId,
-      message,
-    });
-    elapsed = {
-      status: "Error",
-      data: {
-        payload: {},
-        timestamp: new Date().toISOString(),
-      },
-    };
+function getMachineTopicSnapshot(
+  topics: Record<string, ProjectTopicSnapshot>,
+  topicCandidates: string[],
+): ProjectTopicSnapshot | null {
+  for (const topicCandidate of topicCandidates) {
+    const exact = topics[topicCandidate];
+    if (exact) {
+      return exact;
+    }
   }
 
-  try {
-    configurations = await loadConfigurations;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown configurations fetch error.";
-    log.warn("dashboard_configurations_fetch_failed", {
-      machineId,
-      message,
-    });
-    configurations = {
-      status: "Error",
-      data: {
-        payload: {},
-        timestamp: new Date().toISOString(),
-      },
-    };
-  }
-
-  return { state, elapsed, configurations };
+  return null;
 }
 
 export async function updateElapsedTimeHours(
@@ -651,15 +576,12 @@ export async function fetchMachineStateDashboardData(
   const config = getServerConfig();
   const machineName = machineId;
 
-  let stateResponse: StateResponse;
-  let elapsedResponse: StateResponse;
-  let configurationsResponse: StateResponse;
+  let topics: Record<string, ProjectTopicSnapshot>;
+  const stateTopic = toStateDetailsTopic(channel);
 
   try {
-    const response = await loadStateDetails(machineId, channel);
-    stateResponse = response.state;
-    elapsedResponse = response.elapsed;
-    configurationsResponse = response.configurations;
+    const projectState = await fetchProjectState();
+    topics = projectState.data?.[machineId] ?? {};
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
     if (message.includes("401") || message.includes("403")) {
@@ -669,10 +591,8 @@ export async function fetchMachineStateDashboardData(
       });
       tokenCache = null;
       await getServerSessionToken();
-      const response = await loadStateDetails(machineId, channel);
-      stateResponse = response.state;
-      elapsedResponse = response.elapsed;
-      configurationsResponse = response.configurations;
+      const projectState = await fetchProjectState();
+      topics = projectState.data?.[machineId] ?? {};
     } else {
       log.error("dashboard_fetch_failed", {
         machineId,
@@ -682,11 +602,22 @@ export async function fetchMachineStateDashboardData(
     }
   }
 
-  const payload = stateResponse.data?.payload ?? {};
-  const currentElapsedHours = readElapsedHoursFromEnvelope(elapsedResponse.data?.payload);
-  const parsedConfigurations = readConfigurationsFromEnvelope(
-    configurationsResponse.data?.payload,
-  );
+  if (Object.keys(topics).length === 0) {
+    throw new Error(`No project state found for machine '${machineId}'.`);
+  }
+
+  const stateSnapshot = getMachineTopicSnapshot(topics, [stateTopic]);
+  const configurationsSnapshot = getMachineTopicSnapshot(topics, [CONFIGURATIONS_TOPIC]);
+
+  if (!stateSnapshot) {
+    throw new Error(
+      `No state topic '${stateTopic}' found for machine '${machineId}' in project state response.`,
+    );
+  }
+
+  const payload = stateSnapshot.payload ?? {};
+  const currentElapsedHours = toNonNegativeNumber(payload.today_elapsedhr) ?? 0;
+  const parsedConfigurations = readConfigurationsFromEnvelope(configurationsSnapshot?.payload);
 
   const thisWeekRuntime = toFiniteNumber(payload.thisweek);
   const thisMonthRuntime = toFiniteNumber(payload.thismonth);
@@ -694,13 +625,13 @@ export async function fetchMachineStateDashboardData(
   const thisMonthUtilization = toPercent(payload.thismonth_utl);
   const weekHighutil = toPercent(payload.weekHighutil);
   const monthHighutil = toPercent(payload.monthHighutil);
-  const timestamp = stateResponse.data?.timestamp ?? new Date().toISOString();
+  const timestamp = stateSnapshot.timestamp ?? new Date().toISOString();
   const history7d = toHistory(payload);
   const latestDay = history7d.at(-1);
   const todayRuntime = latestDay?.runtimeHours ?? null;
   const todayUtilization = latestDay?.utilizationPct ?? null;
-  const thisWeekElapsed = toNonNegativeNumber(payload.thisweek_elapsed) ?? 0;
-  const thisMonthElapsed = toNonNegativeNumber(payload.thismonth_elapsed) ?? 0;
+  const thisWeekElapsed = toNonNegativeNumber(payload.thisWeek_elapsedhr) ?? 0;
+  const thisMonthElapsed = toNonNegativeNumber(payload.thisMonth_elapsedhr) ?? 0;
 
   log.info("dashboard_fetch_success", {
     machineId,

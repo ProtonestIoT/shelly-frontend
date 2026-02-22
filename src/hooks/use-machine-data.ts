@@ -8,7 +8,6 @@ import {
   fetchMachineList,
   type RealtimeStateSnapshot,
   updateConfigurations,
-  updateElapsedTime,
 } from "@/src/lib/api";
 import { createLogger } from "@/src/lib/logging";
 import type { DashboardData, DayHistory, MachineListItem } from "@/src/types/dashboard";
@@ -97,7 +96,11 @@ function toHistory(payload: Record<string, unknown>): DayHistory[] {
   const rows: DayHistory[] = [];
 
   for (const [key, value] of Object.entries(payload)) {
-    if (key === "status" || key.endsWith("_utl") || key.endsWith("_elapsed")) {
+    if (
+      key === "status" ||
+      key.endsWith("_utl") ||
+      key.endsWith("_elapsedhr")
+    ) {
       continue;
     }
 
@@ -108,7 +111,7 @@ function toHistory(payload: Record<string, unknown>): DayHistory[] {
 
     const runtimeHours = toFiniteNumber(value);
     const utilizationPct = toPercent(payload[`${key}_utl`]);
-    const elapsedHours = toNonNegativeNumber(payload[`${key}_elapsed`]) ?? 0;
+    const elapsedHours = toNonNegativeNumber(payload[`${key}_elapsedhr`]) ?? 0;
 
     rows.push({
       date: isoDate,
@@ -150,7 +153,11 @@ function applyRealtimeStateSnapshot(
 
   const todayRuntime = latestDay?.runtimeHours ?? current.periods.today.runtimeHours;
   const todayUtilization = latestDay?.utilizationPct ?? current.periods.today.utilizationPct;
-  const todayElapsed = latestDay?.elapsedHours ?? current.periods.today.elapsedHours ?? 0;
+  const todayElapsed =
+    (payload ? toNonNegativeNumber(payload.today_elapsedhr) : null) ??
+    latestDay?.elapsedHours ??
+    current.periods.today.elapsedHours ??
+    0;
 
   const thisWeekRuntime = payload
     ? toFiniteNumber(payload.thisweek) ?? current.periods.week.runtimeHours
@@ -171,10 +178,14 @@ function applyRealtimeStateSnapshot(
     ? toPercent(payload.monthHighutil) ?? current.periods.month.highestScorePct
     : current.periods.month.highestScorePct;
   const thisWeekElapsed = payload
-    ? toNonNegativeNumber(payload.thisweek_elapsed) ?? current.periods.week.elapsedHours ?? 0
+    ? toNonNegativeNumber(payload.thisWeek_elapsedhr) ??
+      current.periods.week.elapsedHours ??
+      0
     : current.periods.week.elapsedHours ?? 0;
   const thisMonthElapsed = payload
-    ? toNonNegativeNumber(payload.thismonth_elapsed) ?? current.periods.month.elapsedHours ?? 0
+    ? toNonNegativeNumber(payload.thisMonth_elapsedhr) ??
+      current.periods.month.elapsedHours ??
+      0
     : current.periods.month.elapsedHours ?? 0;
 
   return {
@@ -545,11 +556,34 @@ export function useMachineData(
         throw new Error("No machine selected.");
       }
 
+      if (!channelId) {
+        throw new Error("No channel selected.");
+      }
+
+      const slot = toChannelSlot(channelId, stateChannelIds);
+      if (!slot) {
+        throw new Error(`Cannot map channel '${channelId}' to configuration slot.`);
+      }
+
+      const current = data?.configurations ?? {
+        channel1Hours: 0,
+        channel2Hours: 0,
+        channel1Threshold: 0,
+        channel2Threshold: 0,
+      };
+
+      const payload = {
+        channel1Hours: slot === 1 ? hours : current.channel1Hours,
+        channel2Hours: slot === 2 ? hours : current.channel2Hours,
+        channel1Threshold: current.channel1Threshold,
+        channel2Threshold: current.channel2Threshold,
+      };
+
       setIsUpdatingElapsed(true);
       setError(null);
 
       try {
-        await updateElapsedTime(machineId, hours);
+        await updateConfigurations(machineId, payload);
         invalidateMachineCache(machineId);
         await loadDashboardData(true, true);
       } catch (caughtError) {
@@ -568,7 +602,14 @@ export function useMachineData(
         setIsUpdatingElapsed(false);
       }
     },
-    [invalidateMachineCache, loadDashboardData, machineId],
+    [
+      channelId,
+      data?.configurations,
+      invalidateMachineCache,
+      loadDashboardData,
+      machineId,
+      stateChannelIds,
+    ],
   );
 
   const savePowerThreshold = useCallback(

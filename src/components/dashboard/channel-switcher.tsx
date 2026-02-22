@@ -1,6 +1,7 @@
 "use client";
 
 import ListboxSwitcher from "@/src/components/dashboard/listbox-switcher";
+import { DASHBOARD_COPY } from "@/src/lib/dashboard-copy";
 
 interface ChannelSwitcherProps {
   channels: string[];
@@ -27,9 +28,9 @@ export default function ChannelSwitcher({
       selected={selected}
       onSelect={onSelect}
       disabled={disabled}
-      triggerAriaLabel="Select channel"
-      listAriaLabel="Channel list"
-      placeholder="Select Channel"
+      triggerAriaLabel={DASHBOARD_COPY.channelSwitcherTriggerAria}
+      listAriaLabel={DASHBOARD_COPY.channelSwitcherListAria}
+      placeholder={DASHBOARD_COPY.channelSwitcherPlaceholder}
       menuWidthClass="w-40"
     />
   );

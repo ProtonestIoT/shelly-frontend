@@ -28,6 +28,7 @@ import {
   isElapsedHoursInRange,
 } from "@/src/lib/elapsed";
 import { formatTime } from "@/src/lib/format";
+import { DASHBOARD_COPY } from "@/src/lib/dashboard-copy";
 
 function SkeletonCard({ className }: { className?: string }) {
   return (
@@ -221,7 +222,10 @@ export default function DashboardPage() {
   async function handleElapsedSave() {
     const parsed = Number(elapsedInput);
     if (!Number.isFinite(parsed) || !isElapsedHoursInRange(parsed)) {
-      const message = `Elapsed time must be between ${ELAPSED_HOURS_MIN} and ${ELAPSED_HOURS_MAX} hours.`;
+      const message = DASHBOARD_COPY.elapsedRangeValidation(
+        ELAPSED_HOURS_MIN,
+        ELAPSED_HOURS_MAX,
+      );
       setElapsedSaveMessage(message);
       notifyElapsedUpdateFailed(message);
       return;
@@ -235,10 +239,10 @@ export default function DashboardPage() {
           [activeMachineId]: parsed.toFixed(2),
         }));
       }
-      setElapsedSaveMessage("Elapsed time updated.");
+      setElapsedSaveMessage(DASHBOARD_COPY.elapsedUpdateSuccess);
       notifyElapsedUpdated(parsed);
     } catch {
-      const message = "Failed to update elapsed time.";
+      const message = DASHBOARD_COPY.elapsedUpdateFailure;
       setElapsedSaveMessage(message);
       notifyElapsedUpdateFailed(message);
     }
@@ -251,7 +255,7 @@ export default function DashboardPage() {
 
     const parsed = Number(thresholdInput);
     if (!Number.isFinite(parsed) || parsed < 0) {
-      const message = "Power threshold must be a non-negative number.";
+      const message = DASHBOARD_COPY.thresholdValidation;
       setThresholdSaveMessage(message);
       notifyThresholdUpdateFailed(message);
       return;
@@ -265,10 +269,10 @@ export default function DashboardPage() {
           [activeMachineChannelKey]: parsed.toFixed(2),
         }));
       }
-      setThresholdSaveMessage("Power threshold updated.");
+      setThresholdSaveMessage(DASHBOARD_COPY.thresholdUpdateSuccess);
       notifyThresholdUpdated(parsed);
     } catch {
-      const message = "Failed to update power threshold.";
+      const message = DASHBOARD_COPY.thresholdUpdateFailure;
       setThresholdSaveMessage(message);
       notifyThresholdUpdateFailed(message);
     }
@@ -361,7 +365,7 @@ export default function DashboardPage() {
 
             {hasData && isStale ? (
               <span className="inline-flex rounded-full border border-status-disconnected/30 bg-status-disconnected/10 px-2 py-1 text-xs font-medium text-status-disconnected">
-                Stale (&gt;5m)
+                {DASHBOARD_COPY.staleBadge}
               </span>
             ) : null}
           </div>
@@ -490,7 +494,7 @@ export default function DashboardPage() {
 
                     {hasData && isStale ? (
                       <span className="inline-flex rounded-full border border-status-disconnected/30 bg-status-disconnected/10 px-2 py-1 text-xs font-medium text-status-disconnected">
-                        Stale (&gt;5m)
+                        {DASHBOARD_COPY.staleBadge}
                       </span>
                     ) : null}
                   </div>
@@ -516,7 +520,10 @@ export default function DashboardPage() {
                           setElapsedSaveMessage(null);
                         }
                       }}
-                      placeholder={`Enter ${ELAPSED_HOURS_MIN}-${ELAPSED_HOURS_MAX} hours`}
+                      placeholder={DASHBOARD_COPY.elapsedInputPlaceholder(
+                        ELAPSED_HOURS_MIN,
+                        ELAPSED_HOURS_MAX,
+                      )}
                     />
 
                     <ControlButton
@@ -524,7 +531,7 @@ export default function DashboardPage() {
                       onClick={() => {
                         void handleElapsedSave();
                       }}
-                      disabled={isUpdatingElapsed || !activeMachineId}
+                      disabled={isUpdatingElapsed || !activeMachineId || !activeChannelSlot}
                     >
                       {isUpdatingElapsed ? "Saving..." : "Update Elapsed"}
                     </ControlButton>
@@ -546,7 +553,7 @@ export default function DashboardPage() {
                           setThresholdSaveMessage(null);
                         }
                       }}
-                      placeholder="Enter threshold"
+                      placeholder={DASHBOARD_COPY.thresholdInputPlaceholder}
                       disabled={!activeChannelSlot}
                     />
 
@@ -591,7 +598,7 @@ export default function DashboardPage() {
                     role="status"
                   >
                     <p className="text-xs font-semibold text-status-disconnected uppercase tracking-wide">
-                      Data refresh warning
+                      {DASHBOARD_COPY.nonBlockingWarningTitle}
                     </p>
                     <p className="text-sm text-foreground">{combinedError}</p>
                   </DashboardCard>
@@ -610,7 +617,7 @@ export default function DashboardPage() {
                 className="space-y-4 sm:space-y-6"
                 role="status"
                 aria-live="polite"
-                aria-label="Loading dashboard data"
+                aria-label={DASHBOARD_COPY.loadingAriaLabel}
               >
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
                   <SkeletonCard className="lg:min-h-[250px] animate-fade-up-delay-1" />
@@ -644,17 +651,17 @@ export default function DashboardPage() {
               >
                 <p className="text-sm font-semibold text-status-disconnected uppercase tracking-wide">
                   {data?.machine.status === "DISCONNECTED"
-                    ? "Machine Telemetry Disconnected"
+                    ? DASHBOARD_COPY.telemetryDisconnectedTitle
                     : data?.machine.status === "UNKNOWN"
-                      ? "Machine Telemetry Partial"
-                      : "Telemetry Stale"}
+                      ? DASHBOARD_COPY.telemetryPartialTitle
+                      : DASHBOARD_COPY.telemetryStaleTitle}
                 </p>
                 <p className="text-sm text-foreground">
                   {data?.machine.status === "DISCONNECTED"
-                    ? "No live feed detected from machine power source. Verify sensor link and gateway connectivity."
+                    ? DASHBOARD_COPY.telemetryDisconnectedBody
                     : data?.machine.status === "UNKNOWN"
-                      ? "Realtime runtime and power are available, but machine status mapping is not configured yet."
-                      : "Live feed is older than 5 minutes. Validate network path or data source health."}
+                      ? DASHBOARD_COPY.telemetryPartialBody
+                      : DASHBOARD_COPY.telemetryStaleBody}
                 </p>
               </DashboardCard>
             ) : null}
@@ -665,9 +672,11 @@ export default function DashboardPage() {
                 role="alert"
               >
                 <div className="max-w-lg">
-                  <h2 className="text-xl tracking-wide uppercase">No Data</h2>
+                  <h2 className="text-xl tracking-wide uppercase">
+                    {DASHBOARD_COPY.noDataTitle}
+                  </h2>
                   <p className="mt-2 text-sm text-muted-foreground">
-                    Unable to load dashboard data. {combinedError}
+                    {DASHBOARD_COPY.noDataPrefix} {combinedError}
                   </p>
                 </div>
               </DashboardCard>

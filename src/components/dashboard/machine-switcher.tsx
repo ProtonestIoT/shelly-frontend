@@ -2,6 +2,7 @@
 
 import type { MachineListItem } from "@/src/types/dashboard";
 import ListboxSwitcher from "@/src/components/dashboard/listbox-switcher";
+import { DASHBOARD_COPY } from "@/src/lib/dashboard-copy";
 
 import { getStatusTheme } from "./status";
 
@@ -31,9 +32,9 @@ export default function MachineSwitcher({
       selected={selected}
       onSelect={onSelect}
       disabled={disabled}
-      triggerAriaLabel="Select machine"
-      listAriaLabel="Machine list"
-      placeholder="Select Machine"
+      triggerAriaLabel={DASHBOARD_COPY.machineSwitcherTriggerAria}
+      listAriaLabel={DASHBOARD_COPY.machineSwitcherListAria}
+      placeholder={DASHBOARD_COPY.machineSwitcherPlaceholder}
       menuWidthClass="w-56"
     />
   );

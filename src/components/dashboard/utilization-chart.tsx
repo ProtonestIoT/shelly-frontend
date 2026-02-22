@@ -12,6 +12,7 @@ import {
 } from "recharts";
 
 import type { DayHistory } from "@/src/types/dashboard";
+import { DASHBOARD_COPY } from "@/src/lib/dashboard-copy";
 import { formatChartDate, formatHours, formatPercent, formatShortDate } from "@/src/lib/format";
 
 import DashboardCard from "./dashboard-card";
@@ -40,13 +41,16 @@ function CustomTooltip({ active, payload }: { active?: boolean; payload?: Toolti
     <div className="rounded-md border border-overlay-border bg-overlay p-3 shadow-lg">
       <p className="text-sm font-semibold text-overlay-foreground">{formatShortDate(row.date)}</p>
       <p className="text-sm text-overlay-foreground/75">
-        Utilization: <span className="font-data font-semibold text-overlay-foreground">{formatPercent(row.utilizationPct)}</span>
+        {DASHBOARD_COPY.chartTooltipUtilizationLabel}:{" "}
+        <span className="font-data font-semibold text-overlay-foreground">{formatPercent(row.utilizationPct)}</span>
       </p>
       <p className="text-sm text-overlay-foreground/75">
-        Runtime: <span className="font-data text-overlay-foreground">{formatHours(row.runtimeHours)}</span>
+        {DASHBOARD_COPY.chartTooltipRuntimeLabel}:{" "}
+        <span className="font-data text-overlay-foreground">{formatHours(row.runtimeHours)}</span>
       </p>
       <p className="text-sm text-overlay-foreground/75">
-        Elapsed: <span className="font-data text-overlay-foreground">{formatHours(row.elapsedHours)}</span>
+        {DASHBOARD_COPY.chartTooltipElapsedLabel}:{" "}
+        <span className="font-data text-overlay-foreground">{formatHours(row.elapsedHours)}</span>
       </p>
     </div>
   );

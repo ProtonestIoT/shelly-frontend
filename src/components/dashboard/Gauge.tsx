@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useState } from "react";
 
+import { DASHBOARD_COPY } from "@/src/lib/dashboard-copy";
 import { cn } from "@/src/lib/utils";
 
 import InfoTooltip from "./info-tooltip";
@@ -70,14 +71,14 @@ export default function Gauge({ label, value, size = "md" }: GaugeProps) {
       <InfoTooltip
         label={
           typeof value === "number"
-            ? `${label} utilization: ${normalized}% - ${statusText}`
-            : `${label} utilization is unavailable from current API`
+            ? DASHBOARD_COPY.gaugeUtilization(label, normalized, statusText)
+            : DASHBOARD_COPY.gaugeUnavailable(label)
         }
       >
         <button
           type="button"
           className="flex cursor-help flex-col items-center gap-1"
-          aria-label={`${label} gauge details`}
+          aria-label={DASHBOARD_COPY.gaugeAria(label)}
         >
           <svg width={dimension} height={dimension} viewBox={`0 0 ${dimension} ${dimension}`}>
             <defs>
