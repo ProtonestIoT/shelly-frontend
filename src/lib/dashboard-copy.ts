@@ -1,16 +1,59 @@
-export const TOOLTIP_COPY = {
-  statusMeaning:
-    "Machine state is reported by Protonest state telemetry. RUNNING and IDLE come directly from the latest device status feed.",
-  statusCurrent:
-    "Current machine operating state from the latest state topic message for the selected device.",
-  powerCurrent:
-    "Instantaneous electrical power draw from the monitored CNC circuit. Higher values usually represent active spindle/tool movement.",
-  kpiRuntime:
-    "Runtime is the sum of machine operating hours during the selected period.",
-  kpiElapsed:
-    "Elapsed is the total measured hours in the selected period.",
-  kpiBest:
-    "Best Score is the highest utilization percentage achieved in any single session within this period.",
-  kpiWeeklyBaseline:
+export const DASHBOARD_COPY = {
+  statusCurrentTooltip: "Current machine status",
+  powerCurrentTooltip: "Current active power",
+  kpiRuntimeTodayTooltip: "Machine operating hours today.",
+  kpiRuntimeWeekTooltip: "Machine operating hours in this week.",
+  kpiRuntimeMonthTooltip: "Machine operating hours in this month.",
+  kpiElapsedTodayTooltip:
+    "Elapsed is the user-defined duration set for machine usage today.",
+  kpiElapsedWeekTooltip:
+    "Elapsed is the user-defined duration set for machine usage in this week.",
+  kpiElapsedMonthTooltip:
+    "Elapsed is the user-defined duration set for machine usage in this month.",
+  kpiBestTooltip:
+    "Highest utilization percentage achieved in any single day within this period.",
+  kpiWeeklyBaselineTooltip:
     "Weekly baseline represents the expected productive operating hours target for one calendar week.",
+  machineSwitcherTriggerAria: "Select machine",
+  machineSwitcherListAria: "Machine list",
+  machineSwitcherPlaceholder: "Select Machine",
+  channelSwitcherTriggerAria: "Select channel",
+  channelSwitcherListAria: "Channel list",
+  channelSwitcherPlaceholder: "Select Channel",
+  elapsedRangeValidation: (min: number, max: number) =>
+    `Elapsed time must be between ${min} and ${max} hours.`,
+  thresholdValidation: "Power threshold must be a non-negative number.",
+  elapsedInputPlaceholder: (min: number, max: number) =>
+    `Enter ${min}-${max} hours`,
+  thresholdInputPlaceholder: "Enter threshold",
+  elapsedUpdateSuccess: "Elapsed time updated.",
+  elapsedUpdateFailure: "Failed to update elapsed time.",
+  thresholdUpdateSuccess: "Power threshold updated.",
+  thresholdUpdateFailure: "Failed to update power threshold.",
+  staleBadge: "Stale (>5m)",
+  nonBlockingWarningTitle: "Data refresh warning",
+  loadingAriaLabel: "Loading dashboard data",
+  telemetryDisconnectedTitle: "Machine Telemetry Disconnected",
+  telemetryPartialTitle: "Machine Telemetry Partial",
+  telemetryStaleTitle: "Telemetry Stale",
+  telemetryDisconnectedBody:
+    "No live feed detected from machine power source. Verify sensor link and gateway connectivity.",
+  telemetryPartialBody:
+    "Realtime runtime and power are available, but machine status mapping is not configured yet.",
+  telemetryStaleBody:
+    "Live feed is older than 5 minutes. Validate network path or data source health.",
+  noDataTitle: "No Data",
+  noDataPrefix: "Unable to load dashboard data.",
+  chartTooltipUtilizationLabel: "Utilization",
+  chartTooltipRuntimeLabel: "Runtime",
+  chartTooltipElapsedLabel: "Elapsed",
+  statusCurrentAria: "Current machine status details",
+  powerCurrentAria: "Current active power details",
+  metricDetailsAria: (label: string) => `${label} details`,
+  weeklyBaselineAria: "Weekly baseline details",
+  gaugeAria: (label: string) => `${label} gauge details`,
+  gaugeUtilization: (label: string, normalized: number, statusText: string) =>
+    `${label} utilization: ${normalized}% - ${statusText}`,
+  gaugeUnavailable: (label: string) =>
+    `${label} utilization is unavailable from current API`,
 } as const;
