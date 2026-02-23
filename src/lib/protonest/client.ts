@@ -104,6 +104,25 @@ let tokenRefreshInFlight: Promise<TokenCache> | null = null;
 const log = createLogger("protonest-client", "server");
 
 const TOKEN_EXPIRY_SKEW_MS = 60_000;
+const INITIAL_POWER_FETCH_TIMEOUT_MS = 1_200;
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | null> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      resolve(null);
+    }, timeoutMs);
+
+    void promise
+      .then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch(() => {
+        clearTimeout(timer);
+        resolve(null);
+      });
+  });
+}
 
 function parseJwtExpiryMs(jwtToken: string): number {
   try {
@@ -785,6 +804,7 @@ export async function fetchMachineStateDashboardData(
 
   const config = getServerConfig();
   const machineName = machineId;
+  const initialPowerPromise = fetchInitialPowerWatts(machineId, channel);
 
   let topics: Record<string, ProjectTopicSnapshot>;
   const stateTopic = toStateDetailsTopic(channel);
@@ -865,14 +885,16 @@ export async function fetchMachineStateDashboardData(
       "thisMonthElapsedHr",
     ]) ?? 0;
 
-  let initialPowerWatts: number | null = null;
-  try {
-    initialPowerWatts = await fetchInitialPowerWatts(machineId, channel);
-  } catch (error) {
-    log.warn("dashboard_initial_power_fetch_failed", {
+  const initialPowerWatts = await withTimeout(
+    initialPowerPromise,
+    INITIAL_POWER_FETCH_TIMEOUT_MS,
+  );
+
+  if (initialPowerWatts === null) {
+    log.warn("dashboard_initial_power_fetch_fallback", {
       machineId,
       channel,
-      message: error instanceof Error ? error.message : "Unknown stream fetch error.",
+      timeoutMs: INITIAL_POWER_FETCH_TIMEOUT_MS,
     });
   }
 

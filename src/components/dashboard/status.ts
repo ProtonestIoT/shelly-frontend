@@ -29,7 +29,8 @@ export function getStatusTheme(status: MachineStatus): StatusTheme {
         label: "Running",
         toneClass: "text-status-running",
         dotClass: "bg-status-running",
-        badgeClass: "border-status-running/30 bg-status-running/12 text-status-running",
+        badgeClass:
+          "border-status-running/30 bg-status-running/12 text-status-running",
       };
     case "IDLE":
       return {
