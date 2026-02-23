@@ -28,6 +28,24 @@ interface ProjectStateRequestBody {
   projectName: string;
 }
 
+interface UpdateStateDetailsResponse {
+  status?: string;
+  data?: {
+    payload?: unknown;
+    timestamp?: string;
+  };
+}
+
+interface StreamDataPoint {
+  payload?: unknown;
+  timestamp?: string;
+}
+
+interface StreamDataResponse {
+  status?: string;
+  data?: StreamDataPoint[];
+}
+
 const CONFIGURATIONS_TOPIC = "configurations";
 const ELAPSED_TIME_TOPIC = "elapsedtime";
 
@@ -44,6 +62,33 @@ function toProjectStateRequestPayload(config: {
 }): ProjectStateRequestBody {
   return {
     projectName: config.projectName,
+  };
+}
+
+function toRecentPowerWindowIso(config: {
+  powerWindowStartOffsetDays: number;
+  powerWindowEndOffsetDays: number;
+}): { startTime: string; endTime: string } {
+  const now = new Date();
+  const todayStartUtc = Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate(),
+    0,
+    0,
+    0,
+    0,
+  );
+
+  const oneDayMs = 24 * 60 * 60 * 1000;
+
+  return {
+    startTime: new Date(
+      todayStartUtc + config.powerWindowStartOffsetDays * oneDayMs,
+    ).toISOString(),
+    endTime: new Date(
+      todayStartUtc + config.powerWindowEndOffsetDays * oneDayMs,
+    ).toISOString(),
   };
 }
 
@@ -317,6 +362,79 @@ function toStatus(value: unknown): MachineStatus {
   return "UNKNOWN";
 }
 
+function parsePowerWatts(raw: unknown): number | null {
+  const value =
+    typeof raw === "number" ? raw : typeof raw === "string" ? Number(raw) : null;
+
+  if (value === null || !Number.isFinite(value)) {
+    return null;
+  }
+
+  return Math.abs(value);
+}
+
+function readPowerFromStreamPayload(payload: unknown): number | null {
+  let parsed: unknown = payload;
+
+  if (typeof payload === "string") {
+    try {
+      parsed = JSON.parse(payload) as unknown;
+    } catch {
+      return null;
+    }
+  }
+
+  if (!parsed || typeof parsed !== "object") {
+    return null;
+  }
+
+  const source = parsed as Record<string, unknown>;
+  const nested =
+    source.payload && typeof source.payload === "object"
+      ? (source.payload as Record<string, unknown>)
+      : null;
+
+  return parsePowerWatts(nested?.act_power ?? source.act_power);
+}
+
+async function fetchInitialPowerWatts(
+  machineId: string,
+  channel: string | null,
+): Promise<number | null> {
+  if (!channel) {
+    return null;
+  }
+
+  const config = getServerConfig();
+  const { startTime, endTime } = toRecentPowerWindowIso({
+    powerWindowStartOffsetDays: config.powerWindowStartOffsetDays,
+    powerWindowEndOffsetDays: config.powerWindowEndOffsetDays,
+  });
+
+  const response = await protonestRequest<StreamDataResponse>(
+    "/api/v1/user/get-stream-data/device/topic",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        deviceId: machineId,
+        topic: `status/${channel}`,
+        startTime,
+        endTime,
+        pagination: "0",
+        pageSize: "1",
+      }),
+    },
+    true,
+  );
+
+  const first = response.data?.[0];
+  if (!first) {
+    return null;
+  }
+
+  return readPowerFromStreamPayload(first.payload);
+}
+
 function toChannelFromTopicKey(topic: string): string | null {
   const normalized = topic.trim();
   if (!normalized) {
@@ -428,6 +546,54 @@ function toNonNegativeNumber(value: unknown): number | null {
   return null;
 }
 
+function readNonNegativeNumberFromKeys(
+  source: Record<string, unknown>,
+  keys: string[],
+): number | null {
+  for (const key of keys) {
+    if (!(key in source)) {
+      continue;
+    }
+
+    const next = toNonNegativeNumber(source[key]);
+    if (next !== null) {
+      return next;
+    }
+  }
+
+  return null;
+}
+
+function readPercentFromKeys(
+  source: Record<string, unknown>,
+  keys: string[],
+): number | null {
+  for (const key of keys) {
+    if (!(key in source)) {
+      continue;
+    }
+
+    const candidate = source[key];
+    const normalized =
+      typeof candidate === "number"
+        ? candidate
+        : typeof candidate === "string"
+          ? Number(candidate)
+          : null;
+
+    if (normalized === null || !Number.isFinite(normalized)) {
+      continue;
+    }
+
+    const next = toPercent(normalized);
+    if (next !== null) {
+      return next;
+    }
+  }
+
+  return null;
+}
+
 function readConfigurationsFromEnvelope(payload: unknown): DeviceConfigurations {
   const empty: DeviceConfigurations = {
     channel1Hours: 0,
@@ -448,12 +614,34 @@ function readConfigurationsFromEnvelope(payload: unknown): DeviceConfigurations 
   const source = nested ?? first;
 
   return {
-    channel1Hours: toNonNegativeNumber(source.channel1hours ?? source.Channel1hours) ?? 0,
-    channel2Hours: toNonNegativeNumber(source.channel2hours ?? source.Channel2hours) ?? 0,
+    channel1Hours:
+      readNonNegativeNumberFromKeys(source, [
+        "channel1hours",
+        "Channel1hours",
+        "channel1Hours",
+        "Channel1Hours",
+      ]) ?? 0,
+    channel2Hours:
+      readNonNegativeNumberFromKeys(source, [
+        "channel2hours",
+        "Channel2hours",
+        "channel2Hours",
+        "Channel2Hours",
+      ]) ?? 0,
     channel1Threshold:
-      toNonNegativeNumber(source.channel1threshold ?? source.Channel1threshold) ?? 0,
+      readNonNegativeNumberFromKeys(source, [
+        "channel1threshold",
+        "Channel1threshold",
+        "channel1Threshold",
+        "Channel1Threshold",
+      ]) ?? 0,
     channel2Threshold:
-      toNonNegativeNumber(source.channel2threshold ?? source.Channel2threshold) ?? 0,
+      readNonNegativeNumberFromKeys(source, [
+        "channel2threshold",
+        "Channel2threshold",
+        "channel2Threshold",
+        "Channel2Threshold",
+      ]) ?? 0,
   };
 }
 
@@ -545,8 +733,28 @@ export async function updateElapsedTimeHours(
 export async function updateDeviceConfigurations(
   machineId: string,
   configurations: DeviceConfigurations,
-): Promise<void> {
-  await protonestRequest(
+): Promise<DeviceConfigurations> {
+  const {
+    channel1Hours,
+    channel2Hours,
+    channel1Threshold,
+    channel2Threshold,
+  } = configurations;
+
+  const values: Array<[string, number]> = [
+    ["channel1Hours", channel1Hours],
+    ["channel2Hours", channel2Hours],
+    ["channel1Threshold", channel1Threshold],
+    ["channel2Threshold", channel2Threshold],
+  ];
+
+  for (const [field, value] of values) {
+    if (!Number.isFinite(value) || value < 0) {
+      throw new Error(`${field} must be a non-negative finite number.`);
+    }
+  }
+
+  const response = await protonestRequest<UpdateStateDetailsResponse>(
     "/api/v1/user/update-state-details",
     {
       method: "POST",
@@ -554,15 +762,17 @@ export async function updateDeviceConfigurations(
         deviceId: machineId,
         topic: CONFIGURATIONS_TOPIC,
         payload: {
-          Channel1hours: String(configurations.channel1Hours),
-          Channel2hours: String(configurations.channel2Hours),
-          Channel1threshold: String(configurations.channel1Threshold),
-          Channel2threshold: String(configurations.channel2Threshold),
+          channel1hours: String(channel1Hours),
+          channel2hours: String(channel2Hours),
+          channel1threshold: String(channel1Threshold),
+          channel2threshold: String(channel2Threshold),
         },
       }),
     },
     true,
   );
+
+  return readConfigurationsFromEnvelope(response.data?.payload);
 }
 
 export async function fetchMachineStateDashboardData(
@@ -616,22 +826,55 @@ export async function fetchMachineStateDashboardData(
   }
 
   const payload = stateSnapshot.payload ?? {};
-  const currentElapsedHours = toNonNegativeNumber(payload.today_elapsedhr) ?? 0;
+  const currentElapsedHours =
+    readNonNegativeNumberFromKeys(payload, ["today_elapsedhr", "todayElapsedhr", "todayElapsedHr"]) ??
+    0;
   const parsedConfigurations = readConfigurationsFromEnvelope(configurationsSnapshot?.payload);
 
   const thisWeekRuntime = toFiniteNumber(payload.thisweek);
   const thisMonthRuntime = toFiniteNumber(payload.thismonth);
-  const thisWeekUtilization = toPercent(payload.thisweek_utl);
-  const thisMonthUtilization = toPercent(payload.thismonth_utl);
-  const weekHighutil = toPercent(payload.weekHighutil);
-  const monthHighutil = toPercent(payload.monthHighutil);
+  const thisWeekUtilization = readPercentFromKeys(payload, [
+    "thisweek_utl",
+    "thisWeek_utl",
+    "thisWeekUtl",
+  ]);
+  const thisMonthUtilization = readPercentFromKeys(payload, [
+    "thismonth_utl",
+    "thisMonth_utl",
+    "thisMonthUtl",
+  ]);
+  const weekHighutil = readPercentFromKeys(payload, ["weekHighutil", "weekHighUtil"]);
+  const monthHighutil = readPercentFromKeys(payload, ["monthHighutil", "monthHighUtil"]);
   const timestamp = stateSnapshot.timestamp ?? new Date().toISOString();
   const history7d = toHistory(payload);
   const latestDay = history7d.at(-1);
   const todayRuntime = latestDay?.runtimeHours ?? null;
   const todayUtilization = latestDay?.utilizationPct ?? null;
-  const thisWeekElapsed = toNonNegativeNumber(payload.thisWeek_elapsedhr) ?? 0;
-  const thisMonthElapsed = toNonNegativeNumber(payload.thisMonth_elapsedhr) ?? 0;
+  const thisWeekElapsed =
+    readNonNegativeNumberFromKeys(payload, [
+      "thisWeek_elapsedhr",
+      "thisweek_elapsedhr",
+      "thisWeekElapsedhr",
+      "thisWeekElapsedHr",
+    ]) ?? 0;
+  const thisMonthElapsed =
+    readNonNegativeNumberFromKeys(payload, [
+      "thisMonth_elapsedhr",
+      "thismonth_elapsedhr",
+      "thisMonthElapsedhr",
+      "thisMonthElapsedHr",
+    ]) ?? 0;
+
+  let initialPowerWatts: number | null = null;
+  try {
+    initialPowerWatts = await fetchInitialPowerWatts(machineId, channel);
+  } catch (error) {
+    log.warn("dashboard_initial_power_fetch_failed", {
+      machineId,
+      channel,
+      message: error instanceof Error ? error.message : "Unknown stream fetch error.",
+    });
+  }
 
   log.info("dashboard_fetch_success", {
     machineId,
@@ -645,7 +888,7 @@ export async function fetchMachineStateDashboardData(
       id: machineId,
       name: machineName,
       status: toStatus(payload.status),
-      powerWatts: null,
+      powerWatts: initialPowerWatts,
       lastUpdated: timestamp,
     },
     configurations: parsedConfigurations,

@@ -51,7 +51,7 @@ export default function DashboardPage() {
     Record<string, string>
   >({});
   const [now, setNow] = useState(() => new Date());
-  const [elapsedDraftByMachine, setElapsedDraftByMachine] = useState<
+  const [elapsedDraftByMachineChannel, setElapsedDraftByMachineChannel] = useState<
     Record<string, string>
   >({});
   const [thresholdDraftByMachineChannel, setThresholdDraftByMachineChannel] =
@@ -162,21 +162,6 @@ export default function DashboardPage() {
       data.machine.status === "UNKNOWN"),
   );
   const hasChartData = Boolean(data?.history7d?.length);
-  const elapsedInput = (() => {
-    if (!activeMachineId) {
-      return "";
-    }
-
-    const draft = elapsedDraftByMachine[activeMachineId];
-    if (draft !== undefined) {
-      return draft;
-    }
-
-    const serverElapsed = data?.periods.today.elapsedHours;
-    return typeof serverElapsed === "number" && Number.isFinite(serverElapsed)
-      ? serverElapsed.toFixed(2)
-      : "";
-  })();
 
   const activeChannelSlot = (() => {
     if (!activeChannel) {
@@ -196,6 +181,30 @@ export default function DashboardPage() {
       return 2;
     }
     return null;
+  })();
+
+  const elapsedInput = (() => {
+    if (!activeMachineChannelKey) {
+      return "";
+    }
+
+    const draft = elapsedDraftByMachineChannel[activeMachineChannelKey];
+    if (draft !== undefined) {
+      return draft;
+    }
+
+    if (!data?.configurations || !activeChannelSlot) {
+      return "";
+    }
+
+    const configuredElapsedHours =
+      activeChannelSlot === 1
+        ? data.configurations.channel1Hours
+        : data.configurations.channel2Hours;
+
+    return Number.isFinite(configuredElapsedHours)
+      ? configuredElapsedHours.toFixed(2)
+      : "";
   })();
 
   const thresholdInput = (() => {
@@ -233,10 +242,10 @@ export default function DashboardPage() {
 
     try {
       await saveElapsedHours(parsed);
-      if (activeMachineId) {
-        setElapsedDraftByMachine((current) => ({
+      if (activeMachineChannelKey) {
+        setElapsedDraftByMachineChannel((current) => ({
           ...current,
-          [activeMachineId]: parsed.toFixed(2),
+          [activeMachineChannelKey]: parsed.toFixed(2),
         }));
       }
       setElapsedSaveMessage(DASHBOARD_COPY.elapsedUpdateSuccess);
@@ -510,10 +519,10 @@ export default function DashboardPage() {
                       step={ELAPSED_HOURS_STEP}
                       value={elapsedInput}
                       onChange={(nextValue) => {
-                        if (activeMachineId) {
-                          setElapsedDraftByMachine((current) => ({
+                        if (activeMachineChannelKey) {
+                          setElapsedDraftByMachineChannel((current) => ({
                             ...current,
-                            [activeMachineId]: nextValue,
+                            [activeMachineChannelKey]: nextValue,
                           }));
                         }
                         if (elapsedSaveMessage) {

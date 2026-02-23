@@ -4,6 +4,24 @@ export interface ProtonestServerConfig {
   authPassword: string;
   projectName: string;
   googleSheetUrl: string | null;
+  powerWindowStartOffsetDays: number;
+  powerWindowEndOffsetDays: number;
+}
+
+const DEFAULT_POWER_WINDOW_START_OFFSET_DAYS = -1;
+const DEFAULT_POWER_WINDOW_END_OFFSET_DAYS = 1;
+
+function readInteger(value: string | undefined, fallback: number): number {
+  if (value === undefined) {
+    return fallback;
+  }
+
+  const parsed = Number.parseInt(value.trim(), 10);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+
+  return parsed;
 }
 
 export function getServerConfig(): ProtonestServerConfig {
@@ -12,6 +30,14 @@ export function getServerConfig(): ProtonestServerConfig {
   const authPassword = process.env.PROTONEST_AUTH_PASSWORD?.trim();
   const projectName = process.env.PROTONEST_PROJECT_NAME?.trim();
   const googleSheetUrl = process.env.PROTONEST_GOOGLE_SHEET_URL?.trim() || null;
+  const powerWindowStartOffsetDays = readInteger(
+    process.env.PROTONEST_POWER_WINDOW_START_OFFSET_DAYS,
+    DEFAULT_POWER_WINDOW_START_OFFSET_DAYS,
+  );
+  const powerWindowEndOffsetDays = readInteger(
+    process.env.PROTONEST_POWER_WINDOW_END_OFFSET_DAYS,
+    DEFAULT_POWER_WINDOW_END_OFFSET_DAYS,
+  );
 
   if (!apiBaseUrl) {
     throw new Error("PROTONEST_API_BASE_URL is not configured.");
@@ -33,6 +59,8 @@ export function getServerConfig(): ProtonestServerConfig {
     authPassword,
     projectName,
     googleSheetUrl,
+    powerWindowStartOffsetDays,
+    powerWindowEndOffsetDays,
   };
 }
 

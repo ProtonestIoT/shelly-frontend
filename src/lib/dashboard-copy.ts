@@ -1,17 +1,14 @@
 export const DASHBOARD_COPY = {
   statusCurrentTooltip: "Current machine status",
   powerCurrentTooltip: "Current active power",
-  kpiRuntimeTodayTooltip: "Machine operating hours today.",
-  kpiRuntimeWeekTooltip: "Machine operating hours in this week.",
-  kpiRuntimeMonthTooltip: "Machine operating hours in this month.",
-  kpiElapsedTodayTooltip:
-    "Elapsed is the user-defined duration set for machine usage today.",
-  kpiElapsedWeekTooltip:
-    "Elapsed is the user-defined duration set for machine usage in this week.",
-  kpiElapsedMonthTooltip:
-    "Elapsed is the user-defined duration set for machine usage in this month.",
-  kpiBestTooltip:
-    "Highest utilization percentage achieved in any single day within this period.",
+  kpiRuntimeTodayTooltip: "Machine running time today.",
+  kpiRuntimeWeekTooltip: "Machine running time so far this week.",
+  kpiRuntimeMonthTooltip: "Machine running time so far this month.",
+  kpiElapsedTodayTooltip: "Today's target running time set by you.",
+  kpiElapsedWeekTooltip: "This week's target running time set by you so far.",
+  kpiElapsedMonthTooltip: "This month's target running time set by you so far.",
+  kpiBestWeekTooltip: "Highest usage recorded on a single day this week.",
+  kpiBestMonthTooltip: "Highest usage recorded on a single day this month.",
   kpiWeeklyBaselineTooltip:
     "Weekly baseline represents the expected productive operating hours target for one calendar week.",
   machineSwitcherTriggerAria: "Select machine",

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   connectRealtimeMachineUpdates,
@@ -68,6 +68,50 @@ function toNonNegativeNumber(value: unknown): number | null {
     const numeric = Number(value);
     if (Number.isFinite(numeric)) {
       return Math.max(0, numeric);
+    }
+  }
+
+  return null;
+}
+
+function readNonNegativeNumberFromKeys(
+  source: Record<string, unknown>,
+  keys: string[],
+): number | null {
+  for (const key of keys) {
+    if (!(key in source)) {
+      continue;
+    }
+
+    const next = toNonNegativeNumber(source[key]);
+    if (next !== null) {
+      return next;
+    }
+  }
+
+  return null;
+}
+
+function readPercentFromKeys(
+  source: Record<string, unknown>,
+  keys: string[],
+): number | null {
+  for (const key of keys) {
+    if (!(key in source)) {
+      continue;
+    }
+
+    const raw = source[key];
+    const numeric =
+      typeof raw === "number" ? raw : typeof raw === "string" ? Number(raw) : null;
+
+    if (numeric === null || !Number.isFinite(numeric)) {
+      continue;
+    }
+
+    const next = toPercent(numeric);
+    if (next !== null) {
+      return next;
     }
   }
 
@@ -154,7 +198,13 @@ function applyRealtimeStateSnapshot(
   const todayRuntime = latestDay?.runtimeHours ?? current.periods.today.runtimeHours;
   const todayUtilization = latestDay?.utilizationPct ?? current.periods.today.utilizationPct;
   const todayElapsed =
-    (payload ? toNonNegativeNumber(payload.today_elapsedhr) : null) ??
+    (payload
+      ? readNonNegativeNumberFromKeys(payload, [
+          "today_elapsedhr",
+          "todayElapsedhr",
+          "todayElapsedHr",
+        ])
+      : null) ??
     latestDay?.elapsedHours ??
     current.periods.today.elapsedHours ??
     0;
@@ -166,24 +216,38 @@ function applyRealtimeStateSnapshot(
     ? toFiniteNumber(payload.thismonth) ?? current.periods.month.runtimeHours
     : current.periods.month.runtimeHours;
   const thisWeekUtilization = payload
-    ? toPercent(payload.thisweek_utl) ?? current.periods.week.utilizationPct
+    ? readPercentFromKeys(payload, ["thisweek_utl", "thisWeek_utl", "thisWeekUtl"]) ??
+      current.periods.week.utilizationPct
     : current.periods.week.utilizationPct;
   const thisMonthUtilization = payload
-    ? toPercent(payload.thismonth_utl) ?? current.periods.month.utilizationPct
+    ? readPercentFromKeys(payload, ["thismonth_utl", "thisMonth_utl", "thisMonthUtl"]) ??
+      current.periods.month.utilizationPct
     : current.periods.month.utilizationPct;
   const weekHigh = payload
-    ? toPercent(payload.weekHighutil) ?? current.periods.week.highestScorePct
+    ? readPercentFromKeys(payload, ["weekHighutil", "weekHighUtil"]) ??
+      current.periods.week.highestScorePct
     : current.periods.week.highestScorePct;
   const monthHigh = payload
-    ? toPercent(payload.monthHighutil) ?? current.periods.month.highestScorePct
+    ? readPercentFromKeys(payload, ["monthHighutil", "monthHighUtil"]) ??
+      current.periods.month.highestScorePct
     : current.periods.month.highestScorePct;
   const thisWeekElapsed = payload
-    ? toNonNegativeNumber(payload.thisWeek_elapsedhr) ??
+    ? readNonNegativeNumberFromKeys(payload, [
+        "thisWeek_elapsedhr",
+        "thisweek_elapsedhr",
+        "thisWeekElapsedhr",
+        "thisWeekElapsedHr",
+      ]) ??
       current.periods.week.elapsedHours ??
       0
     : current.periods.week.elapsedHours ?? 0;
   const thisMonthElapsed = payload
-    ? toNonNegativeNumber(payload.thisMonth_elapsedhr) ??
+    ? readNonNegativeNumberFromKeys(payload, [
+        "thisMonth_elapsedhr",
+        "thismonth_elapsedhr",
+        "thisMonthElapsedhr",
+        "thisMonthElapsedHr",
+      ]) ??
       current.periods.month.elapsedHours ??
       0
     : current.periods.month.elapsedHours ?? 0;
@@ -337,46 +401,17 @@ export function useMachineData(
   const [isUpdatingElapsed, setIsUpdatingElapsed] = useState(false);
   const [isUpdatingThreshold, setIsUpdatingThreshold] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const cacheRef = useRef<Record<string, DashboardData>>({});
-  const loadedKeyRef = useRef<Set<string>>(new Set());
   const machineChannelKey = useMemo(
     () => toMachineChannelKey(machineId, channelId),
     [channelId, machineId],
   );
 
-  const invalidateMachineCache = useCallback((targetMachineId: string) => {
-    const keyPrefix = `${targetMachineId}::`;
-    const nextCache: Record<string, DashboardData> = {};
-
-    for (const [key, value] of Object.entries(cacheRef.current)) {
-      if (!key.startsWith(keyPrefix)) {
-        nextCache[key] = value;
-      }
-    }
-
-    cacheRef.current = nextCache;
-
-    loadedKeyRef.current = new Set(
-      [...loadedKeyRef.current].filter((key) => !key.startsWith(keyPrefix)),
-    );
-  }, []);
-
   const loadDashboardData = useCallback(
-    async (silent = false, force = false) => {
+    async (silent = false) => {
       if (!machineId || !machineChannelKey) {
         setData(null);
         setError(null);
         setIsInitialLoading(false);
-        return;
-      }
-
-      if (!force && loadedKeyRef.current.has(machineChannelKey)) {
-        const cached = cacheRef.current[machineChannelKey];
-        if (cached) {
-          setData(cached);
-          setError(null);
-          setIsInitialLoading(false);
-        }
         return;
       }
 
@@ -385,7 +420,6 @@ export function useMachineData(
         channelId,
         key: machineChannelKey,
         silent,
-        force,
       });
 
       if (silent) {
@@ -397,8 +431,6 @@ export function useMachineData(
       try {
         const nextData = await fetchDashboardData(machineId, channelId);
         setData(nextData);
-        cacheRef.current[machineChannelKey] = nextData;
-        loadedKeyRef.current.add(machineChannelKey);
         setError(null);
         log.info("machine_dashboard_load_success", {
           machineId,
@@ -416,7 +448,6 @@ export function useMachineData(
           machineId,
           channelId,
           silent,
-          force,
           message,
         });
       } finally {
@@ -435,15 +466,7 @@ export function useMachineData(
       return;
     }
 
-    const cached = cacheRef.current[machineChannelKey];
-    if (cached) {
-      setData(cached);
-      setError(null);
-      void loadDashboardData(true, true);
-      return;
-    }
-
-    void loadDashboardData(false, true);
+    void loadDashboardData(false);
   }, [loadDashboardData, machineChannelKey]);
 
   useEffect(() => {
@@ -457,42 +480,15 @@ export function useMachineData(
       stateChannelIds,
       onStateTopicMessage: (nextState) => {
         const topicChannel = parseChannelFromStateTopic(nextState.topic);
-        const targetKey = toMachineChannelKey(machineId, topicChannel ?? channelId);
-
-        if (targetKey && cacheRef.current[targetKey]) {
-          const nextCached = applyRealtimeStateSnapshot(
-            cacheRef.current[targetKey],
-            nextState,
-          );
-          cacheRef.current[targetKey] = nextCached;
-
-          if (targetKey === machineChannelKey) {
-            setData(nextCached);
-            setError(null);
-          }
-        } else if (targetKey) {
-          const bootstrap = createRealtimeBootstrapData(machineId);
-          const nextCached = applyRealtimeStateSnapshot(bootstrap, nextState);
-          cacheRef.current[targetKey] = nextCached;
-          loadedKeyRef.current.add(targetKey);
-
-          if (targetKey === machineChannelKey) {
-            setData(nextCached);
-            setError(null);
-          }
-        } else if (machineChannelKey) {
-          setData((current) => {
-            const base =
-              current ??
-              cacheRef.current[machineChannelKey] ??
-              createRealtimeBootstrapData(machineId);
-            const next = applyRealtimeStateSnapshot(base, nextState);
-            cacheRef.current[machineChannelKey] = next;
-            loadedKeyRef.current.add(machineChannelKey);
-            return next;
-          });
-          setError(null);
+        if (topicChannel && channelId && topicChannel !== channelId) {
+          return;
         }
+
+        setData((current) => {
+          const base = current ?? createRealtimeBootstrapData(machineId);
+          return applyRealtimeStateSnapshot(base, nextState);
+        });
+        setError(null);
 
         log.debug("machine_realtime_message", {
           machineId,
@@ -507,10 +503,7 @@ export function useMachineData(
             return current;
           }
 
-          const base =
-            current ??
-            cacheRef.current[machineChannelKey] ??
-            createRealtimeBootstrapData(machineId);
+          const base = current ?? createRealtimeBootstrapData(machineId);
 
           const next = {
             ...base,
@@ -520,9 +513,6 @@ export function useMachineData(
               lastUpdated: new Date().toISOString(),
             },
           };
-
-          cacheRef.current[machineChannelKey] = next;
-          loadedKeyRef.current.add(machineChannelKey);
 
           return next;
         });
@@ -584,8 +574,7 @@ export function useMachineData(
 
       try {
         await updateConfigurations(machineId, payload);
-        invalidateMachineCache(machineId);
-        await loadDashboardData(true, true);
+        await loadDashboardData(true);
       } catch (caughtError) {
         const message =
           caughtError instanceof Error
@@ -605,7 +594,6 @@ export function useMachineData(
     [
       channelId,
       data?.configurations,
-      invalidateMachineCache,
       loadDashboardData,
       machineId,
       stateChannelIds,
@@ -648,8 +636,7 @@ export function useMachineData(
 
       try {
         await updateConfigurations(machineId, payload);
-        invalidateMachineCache(machineId);
-        await loadDashboardData(true, true);
+        await loadDashboardData(true);
       } catch (caughtError) {
         const message =
           caughtError instanceof Error
@@ -667,7 +654,12 @@ export function useMachineData(
         setIsUpdatingThreshold(false);
       }
     },
-    [data?.configurations, invalidateMachineCache, loadDashboardData, machineId, stateChannelIds],
+    [
+      data?.configurations,
+      loadDashboardData,
+      machineId,
+      stateChannelIds,
+    ],
   );
 
   return {

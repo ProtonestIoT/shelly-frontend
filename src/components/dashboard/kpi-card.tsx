@@ -47,6 +47,10 @@ export default function KpiCard({ title, data, weeklyBaselineHours }: KpiCardPro
       : title === "This Week"
         ? DASHBOARD_COPY.kpiElapsedWeekTooltip
         : DASHBOARD_COPY.kpiElapsedMonthTooltip;
+  const bestTooltip =
+    title === "This Week"
+      ? DASHBOARD_COPY.kpiBestWeekTooltip
+      : DASHBOARD_COPY.kpiBestMonthTooltip;
 
   return (
     <DashboardCard className="h-full lg:min-h-[250px]">
@@ -73,7 +77,7 @@ export default function KpiCard({ title, data, weeklyBaselineHours }: KpiCardPro
         {title !== "Today" ? (
           <MetricRow
             label="Best Utilization"
-            tooltip={DASHBOARD_COPY.kpiBestTooltip}
+            tooltip={bestTooltip}
             value={formatPercent(data.highestScorePct)}
           />
         ) : null}
