@@ -57,7 +57,7 @@ export async function POST(request: Request, { params }: Params) {
       channel2Threshold,
     });
 
-    await updateDeviceConfigurations(machineId, {
+    const data = await updateDeviceConfigurations(machineId, {
       channel1Hours,
       channel2Hours,
       channel1Threshold,
@@ -65,7 +65,10 @@ export async function POST(request: Request, { params }: Params) {
     });
 
     return NextResponse.json(
-      { ok: true },
+      {
+        ok: true,
+        data,
+      },
       {
         status: 200,
         headers: {

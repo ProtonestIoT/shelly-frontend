@@ -1,5 +1,6 @@
 import type {
   DashboardData,
+  DeviceConfigurations,
   MachineListItem,
   MachineStatus,
 } from "@/src/types/dashboard";
@@ -35,6 +36,7 @@ interface ElapsedUpdateResponse {
 
 interface ConfigurationsUpdateResponse {
   ok: boolean;
+  data: DeviceConfigurations;
 }
 
 export interface DeviceConfigurationsPayload {
@@ -514,7 +516,7 @@ export async function updateElapsedTime(machineId: string, hours: number): Promi
 export async function updateConfigurations(
   machineId: string,
   payload: DeviceConfigurationsPayload,
-): Promise<void> {
+): Promise<DeviceConfigurations> {
   log.debug("configurations_update_start", {
     machineId,
     ...payload,
@@ -530,9 +532,11 @@ export async function updateConfigurations(
     },
   );
 
-  await parseJsonResponse<ConfigurationsUpdateResponse>(response);
+  const next = await parseJsonResponse<ConfigurationsUpdateResponse>(response);
 
   log.info("configurations_update_success", {
     machineId,
   });
+
+  return next.data;
 }
