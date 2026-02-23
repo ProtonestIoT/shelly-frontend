@@ -36,7 +36,7 @@ export default function StatusBlock({ status, powerWatts }: StatusBlockProps) {
               aria-hidden="true"
             />
             <span
-              className={`text-3xl leading-none tracking-wide ${statusTheme.toneClass}`}
+              className={`text-2xl leading-none tracking-wide wrap-anywhere ${statusTheme.toneClass}`}
             >
               {status}
             </span>
