@@ -49,12 +49,13 @@ export default function Gauge({ label, value, size = "md" }: GaugeProps) {
   const strokeWidth = strokeWidths[size];
   const radius = (dimension - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
-  const normalized =
-    typeof value === "number" ? Math.min(Math.max(Math.round(value), 0), 100) : 0;
+  const roundedValue =
+    typeof value === "number" ? Math.max(Math.round(value), 0) : 0;
+  const normalized = typeof value === "number" ? Math.min(roundedValue, 100) : 0;
   const dashOffset = circumference - (normalized / 100) * circumference;
   const [animatedDashOffset, setAnimatedDashOffset] = useState(circumference);
-  const color = getGaugeColor(normalized);
-  const statusText = typeof value === "number" ? getGaugeBandLabel(normalized) : "Unknown";
+  const color = getGaugeColor(roundedValue);
+  const statusText = typeof value === "number" ? getGaugeBandLabel(roundedValue) : "Unknown";
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -71,7 +72,7 @@ export default function Gauge({ label, value, size = "md" }: GaugeProps) {
       <InfoTooltip
         label={
           typeof value === "number"
-            ? DASHBOARD_COPY.gaugeUtilization(label, normalized, statusText)
+            ? DASHBOARD_COPY.gaugeUtilization(label, roundedValue, statusText)
             : DASHBOARD_COPY.gaugeUnavailable(label)
         }
       >
@@ -160,7 +161,7 @@ export default function Gauge({ label, value, size = "md" }: GaugeProps) {
               fontWeight="bold"
               fontFamily="'JetBrains Mono', monospace"
             >
-              {typeof value === "number" ? `${normalized}%` : "--"}
+              {typeof value === "number" ? `${roundedValue}%` : "--"}
             </text>
           </svg>
           <span
