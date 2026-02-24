@@ -543,11 +543,7 @@ function toPercent(value: unknown): number | null {
     return numeric * 100;
   }
 
-  if (numeric <= 100) {
-    return numeric;
-  }
-
-  return null;
+  return numeric;
 }
 
 function toNonNegativeNumber(value: unknown): number | null {
