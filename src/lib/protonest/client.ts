@@ -101,10 +101,27 @@ interface TokenCache {
 let tokenCache: TokenCache | null = null;
 let tokenRefreshInFlight: Promise<TokenCache> | null = null;
 
+interface ProjectStateCache {
+  value: ProjectStateResponse;
+  expiresAtMs: number;
+}
+
+interface InitialPowerCacheEntry {
+  value: number | null;
+  expiresAtMs: number;
+}
+
+let projectStateCache: ProjectStateCache | null = null;
+let projectStateInFlight: Promise<ProjectStateResponse> | null = null;
+const initialPowerCache = new Map<string, InitialPowerCacheEntry>();
+const initialPowerInFlight = new Map<string, Promise<number | null>>();
+
 const log = createLogger("protonest-client", "server");
 
 const TOKEN_EXPIRY_SKEW_MS = 60_000;
 const INITIAL_POWER_FETCH_TIMEOUT_MS = 1_200;
+const PROJECT_STATE_CACHE_TTL_MS = 1_000;
+const INITIAL_POWER_CACHE_TTL_MS = 5_000;
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | null> {
   return new Promise((resolve) => {
@@ -424,34 +441,59 @@ async function fetchInitialPowerWatts(
     return null;
   }
 
-  const config = getServerConfig();
-  const { startTime, endTime } = toRecentPowerWindowIso({
-    powerWindowStartOffsetDays: config.powerWindowStartOffsetDays,
-    powerWindowEndOffsetDays: config.powerWindowEndOffsetDays,
-  });
-
-  const response = await protonestRequest<StreamDataResponse>(
-    "/api/v1/user/get-stream-data/device/topic",
-    {
-      method: "POST",
-      body: JSON.stringify({
-        deviceId: machineId,
-        topic: `status/${channel}`,
-        startTime,
-        endTime,
-        pagination: "0",
-        pageSize: "1",
-      }),
-    },
-    true,
-  );
-
-  const first = response.data?.[0];
-  if (!first) {
-    return null;
+  const cacheKey = `${machineId}::${channel}`;
+  const now = Date.now();
+  const cached = initialPowerCache.get(cacheKey);
+  if (cached && now < cached.expiresAtMs) {
+    return cached.value;
   }
 
-  return readPowerFromStreamPayload(first.payload);
+  const inFlight = initialPowerInFlight.get(cacheKey);
+  if (inFlight) {
+    return inFlight;
+  }
+
+  const request = (async () => {
+    const config = getServerConfig();
+    const { startTime, endTime } = toRecentPowerWindowIso({
+      powerWindowStartOffsetDays: config.powerWindowStartOffsetDays,
+      powerWindowEndOffsetDays: config.powerWindowEndOffsetDays,
+    });
+
+    const response = await protonestRequest<StreamDataResponse>(
+      "/api/v1/user/get-stream-data/device/topic",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          deviceId: machineId,
+          topic: `status/${channel}`,
+          startTime,
+          endTime,
+          pagination: "0",
+          pageSize: "1",
+        }),
+      },
+      true,
+    );
+
+    const first = response.data?.[0];
+    const value = first ? readPowerFromStreamPayload(first.payload) : null;
+
+    initialPowerCache.set(cacheKey, {
+      value,
+      expiresAtMs: Date.now() + INITIAL_POWER_CACHE_TTL_MS,
+    });
+
+    return value;
+  })();
+
+  initialPowerInFlight.set(cacheKey, request);
+
+  try {
+    return await request;
+  } finally {
+    initialPowerInFlight.delete(cacheKey);
+  }
 }
 
 function toChannelFromTopicKey(topic: string): string | null {
@@ -509,6 +551,13 @@ export async function fetchProjectMachineList(): Promise<MachineListItem[]> {
 
     const machinesWithChannels = machines.filter((machine) => machine.channels.length > 0);
     if (machinesWithChannels.length > 0) {
+      const firstMachine = machinesWithChannels[0];
+      const firstChannel = firstMachine?.channels[0] ?? null;
+
+      if (firstMachine && firstChannel) {
+        void fetchInitialPowerWatts(firstMachine.id, firstChannel).catch(() => null);
+      }
+
       return machinesWithChannels;
     }
 
@@ -695,16 +744,37 @@ function toHistory(payload: Record<string, unknown>): DayHistory[] {
 }
 
 async function fetchProjectState(): Promise<ProjectStateResponse> {
-  const config = getServerConfig();
+  const now = Date.now();
+  if (projectStateCache && now < projectStateCache.expiresAtMs) {
+    return projectStateCache.value;
+  }
 
-  return protonestRequest<ProjectStateResponse>(
-    "/api/v1/user/get-state-details/project",
-    {
-      method: "POST",
-      body: JSON.stringify(toProjectStateRequestPayload(config)),
-    },
-    true,
-  );
+  if (!projectStateInFlight) {
+    projectStateInFlight = (async () => {
+      const config = getServerConfig();
+      const value = await protonestRequest<ProjectStateResponse>(
+        "/api/v1/user/get-state-details/project",
+        {
+          method: "POST",
+          body: JSON.stringify(toProjectStateRequestPayload(config)),
+        },
+        true,
+      );
+
+      projectStateCache = {
+        value,
+        expiresAtMs: Date.now() + PROJECT_STATE_CACHE_TTL_MS,
+      };
+
+      return value;
+    })();
+  }
+
+  try {
+    return await projectStateInFlight;
+  } finally {
+    projectStateInFlight = null;
+  }
 }
 
 function getMachineTopicSnapshot(

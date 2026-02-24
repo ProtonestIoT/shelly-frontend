@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   connectRealtimeMachineUpdates,
+  fetchBootstrapData,
   fetchDashboardData,
-  fetchMachineList,
   type RealtimeStateSnapshot,
   updateConfigurations,
 } from "@/src/lib/api";
@@ -14,6 +14,12 @@ import type { DashboardData, DayHistory, MachineListItem } from "@/src/types/das
 
 const STALE_AFTER_MS = 5 * 60 * 1000;
 const log = createLogger("use-machine-data", "client");
+
+export interface InitialDashboardSnapshot {
+  machineId: string;
+  channelId: string | null;
+  data: DashboardData;
+}
 
 function toChannelSlot(channelId: string, stateChannelIds: string[]): 1 | 2 | null {
   if (channelId.endsWith(":0")) {
@@ -324,6 +330,7 @@ function createRealtimeBootstrapData(machineId: string): DashboardData {
 
 export function useMachineList() {
   const [machines, setMachines] = useState<MachineListItem[]>([]);
+  const [initialDashboard, setInitialDashboard] = useState<InitialDashboardSnapshot | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -339,10 +346,12 @@ export function useMachineList() {
     setError(null);
 
     try {
-      const data = await fetchMachineList();
-      setMachines(data);
+      const payload = await fetchBootstrapData();
+      setMachines(payload.machines);
+      setInitialDashboard(payload.initialDashboard);
       log.info("machine_list_load_success", {
-        count: data.length,
+        count: payload.machines.length,
+        hasInitialDashboard: Boolean(payload.initialDashboard),
         refresh,
       });
     } catch (caughtError) {
@@ -383,13 +392,14 @@ export function useMachineList() {
     await loadMachines(true);
   }, [loadMachines]);
 
-  return { machines, isLoading, isRefreshing, error, refetch };
+  return { machines, initialDashboard, isLoading, isRefreshing, error, refetch };
 }
 
 export function useMachineData(
   machineId: string | null,
   channelId: string | null,
   stateChannelIds: string[],
+  initialSnapshot: InitialDashboardSnapshot | null = null,
 ) {
   const [data, setData] = useState<DashboardData | null>(null);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
@@ -401,6 +411,7 @@ export function useMachineData(
     () => toMachineChannelKey(machineId, channelId),
     [channelId, machineId],
   );
+  const consumedInitialKeyRef = useRef<string | null>(null);
 
   const loadDashboardData = useCallback(
     async (silent = false) => {
@@ -421,6 +432,22 @@ export function useMachineData(
       if (silent) {
         setIsRefreshing(true);
       } else {
+        const initialKey = toMachineChannelKey(initialSnapshot?.machineId ?? null, initialSnapshot?.channelId ?? null);
+        const canUseInitialSnapshot =
+          initialSnapshot !== null &&
+          initialKey !== null &&
+          machineChannelKey === initialKey &&
+          consumedInitialKeyRef.current !== initialKey;
+
+        if (canUseInitialSnapshot) {
+          setData(initialSnapshot.data);
+          setIsInitialLoading(false);
+          setError(null);
+          consumedInitialKeyRef.current = initialKey;
+          void loadDashboardData(true);
+          return;
+        }
+
         setIsInitialLoading(true);
       }
 
@@ -451,7 +478,7 @@ export function useMachineData(
         setIsRefreshing(false);
       }
     },
-    [channelId, machineChannelKey, machineId],
+    [channelId, initialSnapshot, machineChannelKey, machineId],
   );
 
   useEffect(() => {
