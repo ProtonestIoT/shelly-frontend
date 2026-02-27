@@ -38,8 +38,8 @@ jobs:
           
       - name: Debug Secret
         run: |
-          if [ -z "${{ secrets.PERSONAL_GITHUB_TOKEN }}" ]; then
-            echo "Error: PERSONAL_GITHUB_TOKEN is empty"
+          if [ -z "${{ secrets.CLIENT_PAT }}" ]; then
+            echo "Error: CLIENT_PAT is empty"
             exit 1
           else
             echo "Token is present"
