@@ -19,4 +19,4 @@ jobs:
         env:
           TOKEN: ${{ secrets.CLIENT_PAT }}
         run: |
-          git push --mirror https://x-access-token:$TOKEN@github.com/AbinayanRatna/testing-github-shelly.git
+          git push --mirror https://AbinayanRatna:$TOKEN@github.com/AbinayanRatna/testing-github-shelly.git
