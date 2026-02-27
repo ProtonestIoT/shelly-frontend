@@ -1,0 +1,21 @@
+name: Mirror to Client Repo
+
+on:
+  push:
+    branches:
+      - main   # change if needed
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Push to client mirror repo
+        run: |
+          git remote add mirror https://x-access-token:${{ secrets.CLIENT_PAT }}@github.com/clientusername/frontend-mirror.git
+          git push --force mirror main
