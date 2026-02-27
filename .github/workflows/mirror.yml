@@ -14,8 +14,22 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Push to client mirror repo
+          
+      - name: Verify repo access
+        env:
+          TOKEN: ${{ secrets.CLIENT_PAT }}
         run: |
-          git remote add mirror https://x-access-token:${{ secrets.CLIENT_PAT }}@github.com/AbinayanRatna/testing-github-shelly.git
+          curl -H "Authorization: Bearer $TOKEN" \
+          https://api.github.com/repos/AbinayanRatna/testing-github-shelly
+          
+      - name: Push to client mirror repo
+        env:
+          TOKEN: ${{ secrets.CLIENT_PAT }}
+        run: |
+          git remote add mirror https://x-access-token:$TOKEN@github.com/AbinayanRatna/testing-github-shelly.git
           git push --force mirror main
+
+      # - name: Push to client mirror repo
+      #   run: |
+      #     git remote add mirror https://x-access-token:${{ secrets.CLIENT_PAT }}@github.com/AbinayanRatna/testing-github-shelly.git
+      #     git push --force mirror main
