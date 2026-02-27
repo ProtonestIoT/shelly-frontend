@@ -3,37 +3,20 @@ name: Mirror to Client Repo
 on:
   push:
     branches:
-      - main   # change if needed
+      - main
 
 jobs:
   mirror:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout source repo
+      - name: Checkout source repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          
-      - name: Verify repo access
-        env:
-          TOKEN: ${{ secrets.CLIENT_PAT }}
-        run: |
-          curl -H "Authorization: Bearer $TOKEN" \
-          https://api.github.com/repos/AbinayanRatna/testing-github-shelly
 
-      - name: Push to client mirror repo
+      - name: Mirror to client repo
         env:
           TOKEN: ${{ secrets.CLIENT_PAT }}
         run: |
-          git config --global user.name "github-actions"
-          git config --global user.email "github-actions@github.com"
-      
-          git remote add mirror https://github.com/AbinayanRatna/testing-github-shelly.git
-      
           git push --mirror https://x-access-token:$TOKEN@github.com/AbinayanRatna/testing-github-shelly.git
-
-      # - name: Push to client mirror repo
-      #   run: |
-      #     git remote add mirror https://x-access-token:${{ secrets.CLIENT_PAT }}@github.com/AbinayanRatna/testing-github-shelly.git
-      #     git push --force mirror main
