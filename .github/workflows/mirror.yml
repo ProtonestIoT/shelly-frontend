@@ -17,5 +17,5 @@ jobs:
 
       - name: Push to client mirror repo
         run: |
-          git remote add mirror https://x-access-token:${{ secrets.CLIENT_PAT }}@github.com/clientusername/frontend-mirror.git
+          git remote add mirror https://x-access-token:${{ secrets.CLIENT_PAT }}@github.com/AbinayanRatna/testing-github-shelly.git
           git push --force mirror main
