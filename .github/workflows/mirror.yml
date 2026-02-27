@@ -21,13 +21,17 @@ jobs:
         run: |
           curl -H "Authorization: Bearer $TOKEN" \
           https://api.github.com/repos/AbinayanRatna/testing-github-shelly
-          
+
       - name: Push to client mirror repo
         env:
           TOKEN: ${{ secrets.CLIENT_PAT }}
         run: |
-          git remote add mirror https://x-access-token:$TOKEN@github.com/AbinayanRatna/testing-github-shelly.git
-          git push --force mirror main
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@github.com"
+      
+          git remote add mirror https://github.com/AbinayanRatna/testing-github-shelly.git
+      
+          git push --mirror https://x-access-token:$TOKEN@github.com/AbinayanRatna/testing-github-shelly.git
 
       # - name: Push to client mirror repo
       #   run: |
