@@ -1,31 +1,8 @@
-# name: Mirror to Client Repo
-
-# on:
-#   push:
-#     branches:
-#       - main
-
-# jobs:
-#   mirror:
-#     runs-on: ubuntu-latest
-
-#     steps:
-#       - name: Checkout source repository
-#         uses: actions/checkout@v4
-#         with:
-#           fetch-depth: 0
-
-#       - name: Mirror to client repo
-#         env:
-#           TOKEN: ${{ secrets.CLIENT_PAT }}
-#         run: |
-#           git push --mirror https://AbinayanRatna:$TOKEN@github.com/AbinayanRatna/testing-github-shelly.git
-
 name: Mirror to Personal Repo
 
 on:
   push:
-    branches: [ "main" ] # Or "master", or use '*' to mirror all branches
+    branches: [ "main" ]
 
 jobs:
   git-mirror:
@@ -34,25 +11,39 @@ jobs:
       - name: Checkout Source Repo
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Essential to fetch all history and branches
-          
-      - name: Debug Secret
+          fetch-depth: 0
+          persist-credentials: false # Important: prevents token conflicts
+
+      - name: Pre-flight Check (Verify Repo & Token)
+        env:
+          PAT: ${{ secrets.CLIENT_PAT }}
         run: |
-          if [ -z "${{ secrets.CLIENT_PAT }}" ]; then
-            echo "Error: CLIENT_PAT is empty"
+          echo "Checking if the target repository exists and is accessible..."
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: token $PAT" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/AbinayanRatna/testing-github-shelly)
+
+          if [ "$RESPONSE" -eq 200 ]; then
+            echo "✅ Target repository found and accessible!"
+          elif [ "$RESPONSE" -eq 404 ]; then
+            echo "❌ Error: Repository not found. Check the name or ensure the PAT has 'repo' scopes."
+            exit 1
+          elif [ "$RESPONSE" -eq 401 ]; then
+            echo "❌ Error: Unauthorized. Your PAT might be expired or invalid."
             exit 1
           else
-            echo "Token is present"
+            echo "❌ Error: Received HTTP $RESPONSE from GitHub API."
+            exit 1
           fi
-          
+
       - name: Push to Mirror
+        env:
+          TARGET_URL: "https://x-access-token:${{ secrets.CLIENT_PAT }}@github.com/AbinayanRatna/testing-github-shelly.git"
         run: |
-          # Set up authentication using the token
-          REMOTE_URL="https://x-access-token:${{ secrets.CLIENT_PAT }}@github.com/AbinayanRatna/testing-github-shelly.git"
-          
           # Add the personal repo as a remote
-          git remote add mirror "$REMOTE_URL"
+          git remote add mirror "$TARGET_URL"
           
-          # Force push to the mirror
-          # --mirror pushes all branches, tags, and refs
+          # Force push all branches and tags
+          # Using --mirror ensures exact replication
           git push --mirror mirror
