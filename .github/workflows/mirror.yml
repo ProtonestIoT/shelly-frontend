@@ -1,22 +1,49 @@
-name: Mirror to Client Repo
+# name: Mirror to Client Repo
+
+# on:
+#   push:
+#     branches:
+#       - main
+
+# jobs:
+#   mirror:
+#     runs-on: ubuntu-latest
+
+#     steps:
+#       - name: Checkout source repository
+#         uses: actions/checkout@v4
+#         with:
+#           fetch-depth: 0
+
+#       - name: Mirror to client repo
+#         env:
+#           TOKEN: ${{ secrets.CLIENT_PAT }}
+#         run: |
+#           git push --mirror https://AbinayanRatna:$TOKEN@github.com/AbinayanRatna/testing-github-shelly.git
+
+name: Mirror to Personal Repo
 
 on:
   push:
-    branches:
-      - main
+    branches: [ "main" ] # Or "master", or use '*' to mirror all branches
 
 jobs:
-  mirror:
+  git-mirror:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout source repository
+      - name: Checkout Source Repo
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0 # Essential to fetch all history and branches
 
-      - name: Mirror to client repo
-        env:
-          TOKEN: ${{ secrets.CLIENT_PAT }}
+      - name: Push to Mirror
         run: |
-          git push --mirror https://AbinayanRatna:$TOKEN@github.com/AbinayanRatna/testing-github-shelly.git
+          # Set up authentication using the token
+          REMOTE_URL="https://x-access-token:${{ secrets.CLIENT_PAT }}@github.com/AbinayanRatna/testing-github-shelly.git"
+          
+          # Add the personal repo as a remote
+          git remote add mirror "$REMOTE_URL"
+          
+          # Force push to the mirror
+          # --mirror pushes all branches, tags, and refs
+          git push --mirror mirror
