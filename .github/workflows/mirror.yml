@@ -12,38 +12,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          persist-credentials: false # Important: prevents token conflicts
-
-      - name: Pre-flight Check (Verify Repo & Token)
-        env:
-          PAT: ${{ secrets.CLIENT_PAT }}
-        run: |
-          echo "Checking if the target repository exists and is accessible..."
-          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" \
-            -H "Authorization: token $PAT" \
-            -H "Accept: application/vnd.github.v3+json" \
-            https://api.github.com/repos/AbinayanRatna/testing-github-shelly)
-
-          if [ "$RESPONSE" -eq 200 ]; then
-            echo "✅ Target repository found and accessible!"
-          elif [ "$RESPONSE" -eq 404 ]; then
-            echo "❌ Error: Repository not found. Check the name or ensure the PAT has 'repo' scopes."
-            exit 1
-          elif [ "$RESPONSE" -eq 401 ]; then
-            echo "❌ Error: Unauthorized. Your PAT might be expired or invalid."
-            exit 1
-          else
-            echo "❌ Error: Received HTTP $RESPONSE from GitHub API."
-            exit 1
-          fi
+          persist-credentials: false
 
       - name: Push to Mirror
         env:
           TARGET_URL: "https://x-access-token:${{ secrets.CLIENT_PAT }}@github.com/AbinayanRatna/testing-github-shelly.git"
         run: |
-          # Add the personal repo as a remote
           git remote add mirror "$TARGET_URL"
-          
-          # Force push all branches and tags
-          # Using --mirror ensures exact replication
           git push --mirror mirror
