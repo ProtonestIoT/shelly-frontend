@@ -4,24 +4,26 @@ Repository guidance for autonomous coding agents working in `cnc-status-hub`.
 
 ## Project Snapshot
 
-- Framework: Next.js 16 (App Router) with React 19 and TypeScript.
-- Package manager signal: `pnpm-lock.yaml` and `pnpm-workspace.yaml` are present.
-- Current app shape: minimal starter app in `app/`.
-- Linting: ESLint v9 with `eslint-config-next` (`core-web-vitals` + `typescript`).
-- Styling: Tailwind CSS v4 via `@tailwindcss/postcss` and `app/globals.css`.
-- TypeScript mode: strict (`"strict": true` in `tsconfig.json`).
+- Framework: Next.js 16 (App Router) + React 19 + TypeScript.
+- Primary app location: `src/app/`.
+- UI feature surface: `src/components/dashboard/`.
+- Client data orchestration: `src/hooks/use-machine-data.ts`.
+- API integration layer: `src/lib/api.ts` and `src/lib/protonest/`.
+- Styling system: Tailwind CSS v4 with tokens in `src/app/globals.css`.
+- Package manager: `pnpm` (lockfile/workspace files are present).
 
 ## Source of Truth (Read First)
 
 - `package.json` for executable scripts.
+- `tsconfig.json` for type-safety and path aliases.
 - `eslint.config.mjs` for lint rules and ignore behavior.
-- `tsconfig.json` for type constraints and path aliasing.
-- `app/layout.tsx` and `app/page.tsx` for local code style patterns.
-- `app/globals.css` for CSS and theme variable conventions.
+- `src/app/layout.tsx` and `src/app/page.tsx` for route-entry patterns.
+- `src/app/globals.css` for theme tokens, animation utilities, and motion rules.
+- `src/lib/protonest/config.ts` for required env configuration behavior.
 
 ## Command Reference
 
-Use the package manager already used in this repo (prefer `pnpm`).
+Use `pnpm` unless a maintainer explicitly directs otherwise.
 
 ### Install
 
@@ -31,125 +33,131 @@ Use the package manager already used in this repo (prefer `pnpm`).
 
 - `pnpm dev` - start local dev server.
 
+### Lint
+
+- `pnpm lint` - run ESLint.
+
 ### Build
 
 - `pnpm build` - production build (`next build`).
 
-### Start (production runtime)
+### Start (Production Runtime)
 
 - `pnpm start` - start built app (`next start`).
 
-### Lint
-
-- `pnpm lint` - run ESLint using project config.
-
 ### Test
 
-- There is currently **no** `test` script in `package.json`.
-- No Jest/Vitest/Playwright config files were found in this repository.
+- There is currently no `test` script in `package.json`.
+- No Vitest/Jest/Playwright config file exists in this repository.
 
 ### Single Test Execution (Important)
 
 - Not currently available because no test runner is configured.
-- If a runner is introduced, add exact single-test commands here immediately.
+- If a test runner is added, immediately document exact single-test commands here.
 - Typical future patterns (only after script/config exists):
   - Vitest file: `pnpm vitest path/to/file.test.ts`
-  - Vitest test name: `pnpm vitest -t "test name"`
+  - Vitest by name: `pnpm vitest -t "test name"`
   - Jest file: `pnpm jest path/to/file.test.ts`
-  - Jest test name: `pnpm jest -t "test name"`
+  - Jest by name: `pnpm jest -t "test name"`
+
+## Quality Gates and Completion Checklist
+
+- Run `pnpm lint` after meaningful code changes.
+- Run `pnpm build` before finalizing production-facing changes.
+- If tests are added in the future, run full suite and at least one targeted/single test.
+- Do not claim completion without command evidence.
 
 ## Code Style Guidelines
 
-Follow observed project conventions; do not invent a conflicting style.
+Follow existing local patterns in touched files. Keep diffs intentional and minimal.
 
 ### TypeScript and Types
 
-- Keep TypeScript strict-safe; do not weaken strictness.
-- Prefer explicit type imports where relevant:
-  - Example: `import type { Metadata } from "next";`
-- Use framework types when available (e.g., `NextConfig`, `Metadata`).
-- Do not introduce `any` unless absolutely unavoidable.
-- Do not use `@ts-ignore` / `@ts-expect-error` as shortcuts.
+- Keep strict-safe TypeScript; do not weaken compiler safety.
+- Prefer `import type` for type-only imports.
+- Prefer precise types over `any`.
+- Do not use `@ts-ignore` or `@ts-expect-error` to bypass type problems.
+- Reuse existing shared contracts from `src/types/dashboard.ts` when applicable.
 
 ### Imports
 
 - Use ESM imports.
-- Group imports in this order when possible:
+- Group imports consistently:
   1) external packages,
-  2) internal absolute imports (`@/...`),
+  2) absolute internal imports (`@/...`),
   3) relative imports.
-- Keep side-effect style imports (like CSS) after package imports.
-- Prefer `import type` for type-only imports.
+- Keep side-effect imports (for example CSS) after package imports.
 
 ### Naming
 
-- Components: PascalCase (`RootLayout`, `Home`).
-- Functions: camelCase (unless framework requires otherwise).
-- Constants: camelCase for local constants (`geistSans`, `geistMono`).
-- CSS custom properties: kebab-case prefixed with semantic meaning
-  (e.g., `--background`, `--foreground`, `--font-geist-sans`).
+- Components: PascalCase (for example `DashboardPage`, `KpiCard`).
+- Functions and variables: camelCase.
+- Constants: UPPER_SNAKE_CASE only for true constants; local values may remain camelCase.
+- CSS custom properties: kebab-case semantic tokens (for example `--color-background`).
+- Route files must keep Next.js conventions (`page.tsx`, `layout.tsx`, `route.ts`).
 
-### React / Next.js Patterns
+### React and Next.js Patterns
 
-- Use function components and default export for route entry files.
-- Keep App Router conventions:
-  - `app/layout.tsx` for root layout and metadata.
-  - `app/page.tsx` for route page UI.
-- Prefer Next.js primitives where relevant (`next/image`, `next/font`).
+- Route entry files use default export function components.
+- API handlers live in `src/app/api/**/route.ts` and return `NextResponse`.
+- Client components should include `"use client"` only when required.
+- Prefer Next.js primitives (`next/font`, `next/dynamic`) where already used.
 
 ### Formatting
 
-- Match existing formatting style:
-  - Double quotes in TS/TSX and config files.
-  - Trailing commas where formatter adds them.
-  - Semicolons enabled.
-- Keep JSX readable with one prop per line when lines grow.
-- Avoid compacting JSX in ways that reduce readability.
+- Match existing formatting style in touched files.
+- Use double quotes in TS/TSX and config files.
+- Keep semicolons and trailing commas where formatter/linter expects them.
+- Prefer readable multi-line JSX over dense one-line blocks.
 
 ### Styling
 
-- Tailwind utility classes are used directly in JSX.
-- Global design tokens live in `app/globals.css` (`:root` + `@theme inline`).
-- Respect existing CSS variable theme model for background/foreground.
+- Use Tailwind utility classes in JSX.
+- Reuse existing design tokens from `src/app/globals.css`.
+- Respect reduced-motion behavior already defined in global styles.
+- Avoid introducing conflicting theme token names.
 
-### Error Handling
+### Error Handling and Logging
 
-- There is no custom error-handling framework in this repo yet.
-- For new server/client logic:
-  - Fail fast with clear error messages.
-  - Avoid silent catches.
-  - Return typed, explicit error states for UI/data boundaries.
-- Do not add broad try/catch without a concrete recovery path.
+- Fail with explicit, actionable error messages.
+- Avoid silent catches and empty fallback behavior.
+- In API routes, follow existing pattern:
+  - validate input early,
+  - return 4xx for invalid client payloads,
+  - return 5xx with safe error message for unexpected failures.
+- Use `createLogger` from `src/lib/logging.ts` for structured logs.
+- Never log secrets, tokens, passwords, or raw credentials.
 
-### File Organization
+## File Organization and Boundaries
 
-- Keep route-related UI under `app/` following App Router conventions.
-- Prefer small, focused modules over large multi-purpose files.
-- If introducing shared code, use clear folder names and stable boundaries.
+- Keep dashboard UI composition in `src/components/dashboard/`.
+- Keep hooks focused on data/state orchestration (`src/hooks/`).
+- Keep integration logic in `src/lib/` and avoid leaking transport details into UI.
+- Keep environment parsing/normalization in `src/lib/protonest/config.ts`.
+- Do not mix external sandbox code (`websocket-test-external/`) into core app runtime paths.
 
-## Lint and Quality Expectations
+## CI and Deployment Context
 
-- Run `pnpm lint` after meaningful changes.
-- Run `pnpm build` before considering work complete for production-facing edits.
-- If adding tests in the future, ensure both full-suite and single-test commands are
-  documented in this file.
+- CI workflow exists at `.github/workflows/azure-static-web-apps-jolly-meadow-0b1273d00.yml`.
+- Main branch pushes and pull requests to `main` trigger Azure Static Web Apps workflow.
+- Secrets are used for production environment values; never hardcode credentials.
 
 ## Agent Workflow Notes
 
-- Before edits, read nearby files and follow local patterns first.
-- Keep diffs minimal; avoid opportunistic refactors in bugfix tasks.
-- Prefer improving existing files over creating abstractions too early.
-- Document any newly introduced command (especially test commands) in `AGENTS.md`.
+- Before editing, inspect adjacent files and mirror local patterns.
+- Prefer fixing root cause over adding patchwork conditionals.
+- Keep refactors scoped to the requested task unless safety requires a broader fix.
+- Update documentation when introducing new commands, tooling, or setup requirements.
 
 ## Cursor / Copilot Rules Check
 
 - `.cursor/rules/`: not found.
 - `.cursorrules`: not found.
 - `.github/copilot-instructions.md`: not found.
-- If these files are added later, merge their constraints into this document.
+- If any of these files are added later, merge their constraints into this document.
 
-## Current Gaps to Keep in Mind
+## Known Gaps (Current)
 
-- No automated test setup is currently present.
-- No CI workflow files were found in `.github/workflows/`.
-- This appears close to a starter baseline; keep conventions consistent as code grows.
+- No automated test runner is configured.
+- Single-test execution is unavailable until a test runner is added.
+- LSP TypeScript server may not be installed in some local agent environments.

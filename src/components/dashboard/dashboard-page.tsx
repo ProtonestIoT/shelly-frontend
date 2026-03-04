@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 
 import DashboardCard from "@/src/components/dashboard/dashboard-card";
 import {
@@ -16,10 +17,10 @@ import ControlButton from "@/src/components/dashboard/control-button";
 import ControlInputField from "@/src/components/dashboard/control-input-field";
 import Gauge from "@/src/components/dashboard/gauge";
 import KpiCard from "@/src/components/dashboard/kpi-card";
+import LocalTimeLabel from "@/src/components/dashboard/local-time-label";
 import MachineSwitcher from "@/src/components/dashboard/machine-switcher";
 import SheetPanel from "@/src/components/dashboard/sheet-panel";
 import StatusBlock from "@/src/components/dashboard/status-block";
-import UtilizationChart from "@/src/components/dashboard/utilization-chart";
 import { useMachineData, useMachineList } from "@/src/hooks/use-machine-data";
 import {
   ELAPSED_HOURS_MAX,
@@ -27,8 +28,14 @@ import {
   ELAPSED_HOURS_STEP,
   isElapsedHoursInRange,
 } from "@/src/lib/elapsed";
-import { formatTime } from "@/src/lib/format";
 import { DASHBOARD_COPY } from "@/src/lib/dashboard-copy";
+
+const UtilizationChart = dynamic(
+  () => import("@/src/components/dashboard/utilization-chart"),
+  {
+    ssr: false,
+  },
+);
 
 function SkeletonCard({ className }: { className?: string }) {
   return (
@@ -50,7 +57,6 @@ export default function DashboardPage() {
   const [selectedChannelByMachine, setSelectedChannelByMachine] = useState<
     Record<string, string>
   >({});
-  const [now, setNow] = useState(() => new Date());
   const [elapsedDraftByMachineChannel, setElapsedDraftByMachineChannel] = useState<
     Record<string, string>
   >({});
@@ -68,6 +74,7 @@ export default function DashboardPage() {
 
   const {
     machines,
+    initialDashboard,
     isLoading: machineListLoading,
     isRefreshing: machineListRefreshing,
     error: machineListError,
@@ -106,7 +113,7 @@ export default function DashboardPage() {
     isUpdatingThreshold,
     saveElapsedHours,
     savePowerThreshold,
-  } = useMachineData(activeMachineId, activeChannel, availableChannels);
+  } = useMachineData(activeMachineId, activeChannel, availableChannels, initialDashboard);
 
   const activeMachineChannelKey =
     activeMachineId && activeChannel
@@ -127,16 +134,6 @@ export default function DashboardPage() {
       }),
     [activeMachineId, data, machines],
   );
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      setNow(new Date());
-    }, 1000);
-
-    return () => {
-      window.clearInterval(timer);
-    };
-  }, []);
 
   const hasData = Boolean(data);
   const combinedError = machineListError ?? error;
@@ -367,9 +364,7 @@ export default function DashboardPage() {
 
             <p className="font-data text-sm text-foreground">
               Local time:{" "}
-              <time dateTime={now.toISOString()} suppressHydrationWarning>
-                {formatTime(now)}
-              </time>
+              <LocalTimeLabel />
             </p>
 
             {hasData && isStale ? (
@@ -493,12 +488,7 @@ export default function DashboardPage() {
 
                     <p className="font-data text-sm text-foreground">
                       Local time:{" "}
-                      <time
-                        dateTime={now.toISOString()}
-                        suppressHydrationWarning
-                      >
-                        {formatTime(now)}
-                      </time>
+                      <LocalTimeLabel />
                     </p>
 
                     {hasData && isStale ? (

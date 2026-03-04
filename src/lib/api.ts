@@ -4,7 +4,7 @@ import type {
   MachineListItem,
   MachineStatus,
 } from "@/src/types/dashboard";
-import { Client, type IFrame, type IMessage } from "@stomp/stompjs";
+import type { Client as StompClient, IFrame, IMessage } from "@stomp/stompjs";
 import { createLogger } from "@/src/lib/logging";
 
 export type {
@@ -24,6 +24,15 @@ interface WsAuthResponse {
 
 interface MachineListResponse {
   machines: MachineListItem[];
+}
+
+interface BootstrapResponse {
+  machines: MachineListItem[];
+  initialDashboard: {
+    machineId: string;
+    channelId: string | null;
+    data: DashboardData;
+  } | null;
 }
 
 interface DashboardResponse {
@@ -75,6 +84,19 @@ interface WsConfigResponse {
 
 const log = createLogger("dashboard-api", "client");
 
+interface RealtimeConfigCache {
+  value: PublicRealtimeConfig;
+  expiresAtMs: number;
+}
+
+let wsAuthTokenCache: WsAuthResponse | null = null;
+let wsAuthTokenInFlight: Promise<WsAuthResponse> | null = null;
+let realtimeConfigCache: RealtimeConfigCache | null = null;
+let realtimeConfigInFlight: Promise<PublicRealtimeConfig> | null = null;
+
+const WS_AUTH_REFRESH_SKEW_MS = 5_000;
+const REALTIME_CONFIG_CACHE_TTL_MS = 30_000;
+
 function jsonHeaders() {
   return {
     "Content-Type": "application/json",
@@ -111,24 +133,61 @@ async function parseJsonResponse<T>(response: Response): Promise<T> {
 }
 
 async function fetchWsAuthToken(): Promise<WsAuthResponse> {
-  const response = await fetch("/api/protonest/ws-auth", {
-    method: "GET",
-    headers: jsonHeaders(),
-    cache: "no-store",
-  });
+  const now = Date.now();
+  if (wsAuthTokenCache && now < wsAuthTokenCache.expiresAtMs - WS_AUTH_REFRESH_SKEW_MS) {
+    return wsAuthTokenCache;
+  }
 
-  return parseJsonResponse<WsAuthResponse>(response);
+  if (!wsAuthTokenInFlight) {
+    wsAuthTokenInFlight = (async () => {
+      const response = await fetch("/api/protonest/ws-auth", {
+        method: "GET",
+        headers: jsonHeaders(),
+        cache: "no-store",
+      });
+
+      const token = await parseJsonResponse<WsAuthResponse>(response);
+      wsAuthTokenCache = token;
+      return token;
+    })();
+  }
+
+  try {
+    return await wsAuthTokenInFlight;
+  } finally {
+    wsAuthTokenInFlight = null;
+  }
 }
 
 async function fetchRealtimeConfig(): Promise<PublicRealtimeConfig> {
-  const response = await fetch("/api/protonest/ws-config", {
-    method: "GET",
-    headers: jsonHeaders(),
-    cache: "no-store",
-  });
+  const now = Date.now();
+  if (realtimeConfigCache && now < realtimeConfigCache.expiresAtMs) {
+    return realtimeConfigCache.value;
+  }
 
-  const payload = await parseJsonResponse<WsConfigResponse>(response);
-  return payload.config;
+  if (!realtimeConfigInFlight) {
+    realtimeConfigInFlight = (async () => {
+      const response = await fetch("/api/protonest/ws-config", {
+        method: "GET",
+        headers: jsonHeaders(),
+        cache: "no-store",
+      });
+
+      const payload = await parseJsonResponse<WsConfigResponse>(response);
+      realtimeConfigCache = {
+        value: payload.config,
+        expiresAtMs: Date.now() + REALTIME_CONFIG_CACHE_TTL_MS,
+      };
+
+      return payload.config;
+    })();
+  }
+
+  try {
+    return await realtimeConfigInFlight;
+  } finally {
+    realtimeConfigInFlight = null;
+  }
 }
 
 function readMessageTopic(body: string): string | null {
@@ -155,22 +214,14 @@ function readMessageTopic(body: string): string | null {
   }
 }
 
-function messageMatchesTopic(body: string, expectedTopic: string): boolean {
-  const topic = readMessageTopic(body);
-  if (!topic) {
-    return false;
-  }
-
-  return topic.toLowerCase() === expectedTopic.trim().toLowerCase();
-}
-
 function messageMatchesAnyTopic(body: string, expectedTopics: string[]): boolean {
   const topic = readMessageTopic(body);
   if (!topic) {
     return true;
   }
 
-  return expectedTopics.some((topic) => messageMatchesTopic(body, topic));
+  const normalizedTopic = topic.toLowerCase();
+  return expectedTopics.some((expectedTopic) => normalizedTopic === expectedTopic.trim().toLowerCase());
 }
 
 function readPowerWatts(body: string): number | null {
@@ -291,10 +342,20 @@ export function connectRealtimeMachineUpdates({
   onPowerUpdate,
   onError,
 }: RealtimeConnectionOptions): () => void {
-  let client: Client | null = null;
+  let client: StompClient | null = null;
   let reconnectTimer: number | null = null;
   let isDisposed = false;
   let setupAttempt = 0;
+
+  const closeConnection = () => {
+    if (reconnectTimer !== null) {
+      window.clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+
+    void client?.deactivate();
+    client = null;
+  };
 
   const openConnection = async () => {
     if (isDisposed) {
@@ -302,6 +363,8 @@ export function connectRealtimeMachineUpdates({
     }
 
     try {
+      const { Client } = await import("@stomp/stompjs");
+
       log.info("ws_connect_start", {
         machineId,
         attempt: setupAttempt,
@@ -430,19 +493,29 @@ export function connectRealtimeMachineUpdates({
     }
   };
 
+  const handlePageHide = () => {
+    closeConnection();
+  };
+
+  const handlePageShow = () => {
+    if (!isDisposed && client === null) {
+      void openConnection();
+    }
+  };
+
   void openConnection();
+  window.addEventListener("pagehide", handlePageHide);
+  window.addEventListener("pageshow", handlePageShow);
 
   return () => {
     isDisposed = true;
-
-    if (reconnectTimer !== null) {
-      window.clearTimeout(reconnectTimer);
-    }
+    window.removeEventListener("pagehide", handlePageHide);
+    window.removeEventListener("pageshow", handlePageShow);
 
     log.info("ws_cleanup_close", {
       machineId,
     });
-    void client?.deactivate();
+    closeConnection();
   };
 }
 
@@ -459,6 +532,24 @@ export async function fetchMachineList(): Promise<MachineListItem[]> {
     count: payload.machines.length,
   });
   return payload.machines;
+}
+
+export async function fetchBootstrapData(): Promise<BootstrapResponse> {
+  log.debug("bootstrap_fetch_start");
+
+  const response = await fetch("/api/protonest/bootstrap", {
+    method: "GET",
+    headers: jsonHeaders(),
+    cache: "no-store",
+  });
+
+  const payload = await parseJsonResponse<BootstrapResponse>(response);
+  log.info("bootstrap_fetch_success", {
+    machineCount: payload.machines.length,
+    hasInitialDashboard: Boolean(payload.initialDashboard),
+  });
+
+  return payload;
 }
 
 export async function fetchDashboardData(
