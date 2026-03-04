@@ -587,11 +587,6 @@ function toPercent(value: unknown): number | null {
   if (numeric === null) {
     return null;
   }
-
-  if (numeric <= 1) {
-    return numeric * 100;
-  }
-
   return numeric;
 }
 
