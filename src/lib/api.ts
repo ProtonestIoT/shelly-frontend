@@ -67,7 +67,7 @@ interface RealtimeConnectionOptions {
   channelId: string | null;
   stateChannelIds: string[];
   onStateTopicMessage: (next: RealtimeStateSnapshot) => void;
-  onPowerUpdate: (powerWatts: number | null) => void;
+  onPowerUpdate: (activePower: number | null) => void;
   onError: (message: string) => void;
 }
 
@@ -441,13 +441,13 @@ export function connectRealtimeMachineUpdates({
           client?.subscribe(`${config.streamTopicPrefix}/${machineId}`, (message: IMessage) => {
             if (messageMatchesAnyTopic(message.body, streamTopics)) {
               const receivedTopic = readMessageTopic(message.body);
-              const powerWatts = readPowerWatts(message.body);
+              const activePower = readPowerWatts(message.body);
               log.debug("ws_stream_message", {
                 machineId,
                 topic: receivedTopic,
-                powerWatts,
+                activePower,
               });
-              onPowerUpdate(powerWatts);
+              onPowerUpdate(activePower);
             }
           });
         },

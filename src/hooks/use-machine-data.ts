@@ -515,19 +515,34 @@ export function useMachineData(
           hasPayload: Boolean(nextState.payload),
         });
       },
-      onPowerUpdate: (powerWatts) => {
+      onPowerUpdate: (activePower) => {
         setData((current) => {
           if (!machineChannelKey) {
             return current;
           }
 
           const base = current ?? createRealtimeBootstrapData(machineId);
+          const channelSlot = channelId ? toChannelSlot(channelId, stateChannelIds) : null;
+          const threshold =
+            channelSlot === 1
+              ? base.configurations.channel1Threshold
+              : channelSlot === 2
+                ? base.configurations.channel2Threshold
+                : null;
+          const powerMagnitude = activePower === null ? null : Math.abs(activePower);
+          const nextStatus =
+            powerMagnitude !== null && threshold !== null
+              ? powerMagnitude >= threshold
+                ? "RUNNING"
+                : "IDLE"
+              : base.machine.status;
 
           const next = {
             ...base,
             machine: {
               ...base.machine,
-              powerWatts,
+              status: nextStatus,
+              powerWatts: powerMagnitude,
               lastUpdated: new Date().toISOString(),
             },
           };
